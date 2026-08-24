@@ -444,6 +444,9 @@ async def ws_agent(ws: WebSocket) -> None:
             # Onboarding skills are one-shot per repo: once memory is established, `retrofit`
             # would overwrite the owner's approved docs.
             block_categories = None if is_onboarding else {"onboarding"}
+            # A phase skill outside a work-item has no item to read and no pen mounted.
+            if not work_item_id:
+                block_categories = (block_categories or set()) | {"workspace"}
             # Unbound chat still spends tokens, so record a lightweight run: telemetry only, no
             # status flip and no run-lock.
             turn_hooks = None
@@ -532,7 +535,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     effort=effort or _spine.DEFAULT_EFFORT,   # final "medium" floor
                     approve=turn_approve,
                     extra_mcp_servers=turn_mcp,
-                    enforce_silent=True,   # user-facing chat: hide+block internal `access: silent` skills
+                    enforce_silent=True,   # default; stated because chat is where a silent skill tempts
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
                     system_append=session_append,       # Focus (work-item) / Guard (general) block
                     # A bound chat already names its subject, so it skips the board-wide list; an

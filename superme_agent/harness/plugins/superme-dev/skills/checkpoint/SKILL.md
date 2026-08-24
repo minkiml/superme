@@ -1,8 +1,8 @@
 ---
 name: checkpoint
-description: Bank this thread's continuity checkpoint — the conversational state that no artifact holds. Use when the kernel asks for one before compacting this session, or before you wrap up a long stretch of work.
+description: Bank this thread's continuity checkpoint — the conversational state that no artifact holds. Use when the kernel asks for one before compacting this session, or before you wrap up a long stretch of work. Not for restating what the plan, the diff or the reports already hold, and not for a phase's own report (each phase files its own).
 argument-hint: "[work-item-id | target path]"
-category: workspace
+category: general
 ---
 
 # Bank a checkpoint
@@ -47,7 +47,8 @@ Five things, because they live only in the conversation:
    - On a work-item → `plan.md`'s `## Decisions & clarifications`.
    - Project-wide → **Name what the anchor docs will owe**: which of
      `project-prd / architecture / capabilities` this decision changes, and how.
-   - Really work rather than a decision → file it with `create_inbox_item` and say you did.
+   - Really work rather than a decision → file it with `create_inbox_item` and say you did. Not
+     every thread mounts that tool; where it is absent, name the work in `remaining` instead.
      `work_kind` is REQUIRED: an inbox item is a thing that becomes a work item when the owner
      pushes it, so naming which machinery it becomes is the same act as saying it is work. If the
      thread has not settled which, it has not settled that this is work either — leave it as the
