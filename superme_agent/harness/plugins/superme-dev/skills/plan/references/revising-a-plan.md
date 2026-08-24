@@ -28,6 +28,10 @@ Read them there rather than here — they are in front of you whenever you call 
   scope is `resume`. Do not manufacture an edit to have something to show, and do not re-instruct
   build on parts nobody complained about. Over-modification is the failure this grammar exists to
   prevent, and `resume` is the honest answer to *"looks close, try more"*.
+- **A check you add to `## Verification plan` carries the whole field set** — `proves`, `traces`,
+  `covers`, `mode`, `scenario`, `expect`, under a `### <id>` no other check uses. The template that
+  taught you the shape is not in front of you here, and the gate refuses the entire revision over
+  one missing line.
 - **A `redesign` removes its dead tasks EXPLICITLY.** Nothing resets for you, because a guess is
   worse than the exact list. Name what is void in `superseded` and say what build must undo —
   forward, with new commits that revert, never a reset or a force-push.
