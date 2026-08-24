@@ -9,7 +9,7 @@ show it" — asked by every plan, and by the owner deciding what the exam is wor
 | act | who | when |
 |---|---|---|
 | nominate | vet (`nominate_check`) | after a check has actually PASSED, and only if it defends the repo rather than the item |
-| write | close (`apply_knowledge_delta`, doc `verification`, section `Available`) | at close, from that item's nominations |
+| write | close (`apply_knowledge_edits`, doc `verification`, section `Available`) | at close, from that item's nominations |
 | promote to standing | **the owner only** | in the dashboard — Artifacts → Verification |
 | drop | the owner | when an entry turns out not to generalise |
 

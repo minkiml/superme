@@ -333,7 +333,7 @@ def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
 def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, *,
                          activated: set[str] | None = None, asset_dir: Path | None = None) -> str:
     """The always-on CATALOG: one frontmatter line per ENABLED in-scope item.
-    Bodies are pulled on demand via `pull_constitution`."""
+    Bodies are pulled on demand via `read_constitution`."""
     items = [it for it in list_constitution(mode, universal_dir, repo_dir,
                                             activated=activated, asset_dir=asset_dir)
              if it["enabled"]]
@@ -347,7 +347,7 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, 
         "## Constitution catalog (operational directives — in force)\n"
         "These are the list of some constitution of superme's framework. Each line names one constitution; when its "
         "description is relevant to what you're doing and you need the full contract or information, call "
-        "`pull_constitution(name)` to load its body and follow them."
+        "`read_constitution(name)` to load its body and follow them."
     )
     return header + "\n\n" + "\n".join(lines)
 

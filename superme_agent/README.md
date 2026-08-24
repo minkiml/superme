@@ -41,7 +41,7 @@ rest is catalog-then-pull.
    - `SELF.md` (persona) + the per-mode charter (`core-charter.md` / `dev-charter.md`) are the
      **always-dumped** layer, plus an optional `charter.local.md` from the host's local harness.
    - `constitution/` — operational intelligence, **frontmatter-first**: the catalog (name +
-     description) is always on; a body is pulled on demand (`pull_constitution`).
+     description) is always on; a body is pulled on demand (`read_constitution`).
    - `plugins/` (skills + subagents, likewise frontmatter-first), `tools/`, `policy.py`, `forge_kit/`.
 2. **Local harness** — `local-harness/<id>/<mode>/`: this host's own operational content.
 3. **Working knowledge** — `superme-knowledge/<id>-knowledge/` (pulled on demand; see its README).

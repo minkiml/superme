@@ -40,7 +40,7 @@ EXPECTED: dict[str, set[str]] = {
     # settled.
     "triage": {"scaffold_artifact", "set_triage_classification", "create_inbox_item",
                "file_phase_report", "read_decisions"},
-    "plan": {"scaffold_artifact", "dry_run_checks", "read_verification_library",
+    "plan": {"scaffold_artifact", "check_plan_commands", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"},
     "build": {"record_validation", "request_authorization", "sync_from_anchor_branch",
               "write_checkpoint",
@@ -49,7 +49,7 @@ EXPECTED: dict[str, set[str]] = {
             "read_verification_library", "file_vet_report"},
     "review": {"scaffold_artifact", "request_authorization", "file_phase_report",
                "read_decisions"},
-    "close": {"apply_knowledge_delta", "read_verification_library", "create_inbox_item",
+    "close": {"apply_knowledge_edits", "read_verification_library", "create_inbox_item",
               "file_phase_report"},
     "investigate": {"scaffold_artifact", "write_checkpoint", "file_phase_report",
                     "read_decisions"},
@@ -59,7 +59,7 @@ EXPECTED: dict[str, set[str]] = {
     "handoff": {"write_checkpoint"},
     "resolve": {"read_dev_log"},
     "capture": {"file_candidate", "read_dev_log"},
-    "distill": {"read_candidates", "read_proposals", "propose_memory", "merge_into_proposal",
+    "distill": {"read_candidates", "read_proposals", "propose_learning", "merge_into_proposal",
                 "drop_candidates"},
     "write": {"stage_artifact"},
 }
@@ -99,7 +99,7 @@ def test_invariants() -> None:
     for tool, owner in (("record_validation", "build"), ("record_verification", "vet"),
                         ("record_diagnosis", "vet"), ("record_lens", "vet"),
                         ("file_vet_report", "vet"), ("file_plan_report", "plan"),
-                        ("revise_plan", "plan"), ("apply_knowledge_delta", "close"),
+                        ("revise_plan", "plan"), ("apply_knowledge_edits", "close"),
                         ("set_triage_classification", "triage")):
         holders = [s for s in PHASES if tool in names(s)]
         ok(f"{tool} belongs to {owner} alone", holders == [owner], str(holders))
@@ -109,14 +109,14 @@ def test_invariants() -> None:
     # An unbound chat has no item to point the item pens at; they would only ever refuse.
     item_pens = {"scaffold_artifact", "set_triage_classification", "record_validation",
                  "record_verification", "record_diagnosis", "record_lens", "file_plan_report",
-                 "file_vet_report", "revise_plan", "apply_knowledge_delta", "write_checkpoint",
-                 "sync_from_anchor_branch", "request_authorization", "dry_run_checks",
+                 "file_vet_report", "revise_plan", "apply_knowledge_edits", "write_checkpoint",
+                 "sync_from_anchor_branch", "request_authorization", "check_plan_commands",
                  "nominate_check"}
     for scope in ("general", "onboarding", "diagnosis"):
         ok(f"{scope} holds no item pen", not (names(scope) & item_pens),
            str(names(scope) & item_pens))
     # The learning pens stay out of every human-facing surface (the pre-existing rule, now per-scope).
-    pens = {"file_candidate", "propose_memory", "merge_into_proposal", "drop_candidates",
+    pens = {"file_candidate", "propose_learning", "merge_into_proposal", "drop_candidates",
             "stage_artifact"}
     leaked = {s for s in TOOL_SCOPES if s not in ("capture", "distill", "write")
               and (names(s) & pens)}
@@ -124,7 +124,7 @@ def test_invariants() -> None:
 
 
 # A skill naming a tool its session cannot see is an instruction that always fails.
-OTHER_SERVERS = {"report_completion", "deputy_verdict"}
+OTHER_SERVERS = {"report_completion", "submit_gate_verdict"}
 ALL_TOOLS = {t.name for t in DEV_TOOLS}
 
 

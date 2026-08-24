@@ -180,7 +180,7 @@ def test_runs_pane_sees_every_run(tmp: Path) -> None:
     sp.finish_run(build, tokens=0)
     # A deputy run was NEVER written to run_artifact — that is what made the pane lose it.
     deputy = sp.start_run("repoX", feature="deputy", item_id="itemC")
-    sp.log_run_event(repo_id="repoX", kind="mcp", name="deputy_verdict", run_id=deputy,
+    sp.log_run_event(repo_id="repoX", kind="mcp", name="submit_gate_verdict", run_id=deputy,
                      item_id="itemC")
     sp.log_run_event(repo_id="repoX", kind="reply", name="reply", description="approved",
                      run_id=deputy, item_id="itemC")

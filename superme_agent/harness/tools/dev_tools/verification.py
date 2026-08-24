@@ -6,12 +6,12 @@ from typing import Annotated, Literal, Required, TypedDict
 from .render import _err, _ok, _s
 from .items import _bound_err, _item_dir
 
-class DryRunChecksArgs(TypedDict, total=False):
+class CheckPlanCommandsArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
 
 
-def _dry_run_checks(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
-    async def dry_run_checks(args: dict) -> dict:
+def _check_plan_commands(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
+    async def check_plan_commands(args: dict) -> dict:
         """Smoke-test the `run:` blocks already written into this item's plan. Records nothing."""
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -33,7 +33,7 @@ def _dry_run_checks(*, store, context_id, dev_root=None, repo_dir=None, bound_it
                    + "\n\nA failing assertion is EXPECTED — the work is not built yet. What you "
                      "are looking for is a command that could not run at all (usage error, import "
                      "error, wrong path): that one will never come back green, whatever build does.")
-    return dry_run_checks
+    return check_plan_commands
 
 
 class RecordValidationArgs(TypedDict, total=False):

@@ -21,7 +21,7 @@ from superme_agent.core import gate_briefs as GB
 from superme_agent.core import knowledge_delta as KD
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.vocab.kind_profiles import KIND_PROFILES
-from superme_agent.harness.tools.dev_tools import _apply_knowledge_delta, ITEM_DEV_TOOLS
+from superme_agent.harness.tools.dev_tools import _apply_knowledge_edits, ITEM_DEV_TOOLS
 from scripts.sources import src
 
 PASS = 0
@@ -413,7 +413,7 @@ class _Store:
 
 
 def test_tools(tmp: Path) -> None:
-    print("tools: apply_knowledge_delta")
+    print("tools: apply_knowledge_edits")
     dev = DevKnowledgeService()
     dev_root = tmp / "tl-root"
     _seed_anchor_docs(dev_root)
@@ -421,7 +421,7 @@ def test_tools(tmp: Path) -> None:
     iid, item_dir = _mk_item(dev, dev_root, "tooled")
     store = _Store()
 
-    apply_kd = _apply_knowledge_delta(store=store, context_id="t", dev_root=dev_root,
+    apply_kd = _apply_knowledge_edits(store=store, context_id="t", dev_root=dev_root,
                                       repo_dir=repo, bound_item_id=iid)
     good = json.dumps([{"doc": "architecture", "section": "Stack", "op": "append",
                         "content": "see `real.py`"}])
@@ -445,7 +445,7 @@ def test_tools(tmp: Path) -> None:
        and (dev_root / "general" / "architecture.md").read_text(encoding="utf-8") == before)
     rid, _r_dir = _mk_item(dev, dev_root, "res", kind="research")
     dev.set_work_item_phase(dev_root, rid, "close")
-    apply_r = _apply_knowledge_delta(store=store, context_id="t", dev_root=dev_root,
+    apply_r = _apply_knowledge_edits(store=store, context_id="t", dev_root=dev_root,
                                      repo_dir=repo, bound_item_id=rid)
     r = asyncio.run(apply_r({"item_id": rid, "ops": good}))
     ok("research kind refused (knowledge_writes=False)", r.get("is_error")

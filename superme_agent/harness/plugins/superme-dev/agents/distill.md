@@ -1,7 +1,7 @@
 ---
 name: distill
 description: Consolidates pending operational-learning candidates into typed, classified proposals (constitution/skill/agent) for the owner to ratify. Use when the owner wants captured learnings processed, distilled, or turned into proposals.
-tools: Read, Grep, mcp__dev__read_candidates, mcp__dev__read_proposals, mcp__dev__propose_memory, mcp__dev__merge_into_proposal, mcp__dev__drop_candidates
+tools: Read, Grep, mcp__dev__read_candidates, mcp__dev__read_proposals, mcp__dev__propose_learning, mcp__dev__merge_into_proposal, mcp__dev__drop_candidates
 model: opus
 category: learning
 effort: medium
@@ -100,7 +100,7 @@ unrelated learnings, never claim what the candidates don't support.
    don't settle it: `clarifications` = JSON array of `{"question", "suggested", "blocking"}`, answered by
    the owner at gate 1. Don't ask what you can decide.
 
-7. **File or merge** each surviving group. New learning → `mcp__dev__propose_memory` with the content from
+7. **File or merge** each surviving group. New learning → `mcp__dev__propose_learning` with the content from
    steps 4–5 (plus a shared `cluster` if any, and an honest `confidence`). Already covered → the
    `mcp__dev__merge_into_proposal` call from step 3. Either marks its candidates handled.
 

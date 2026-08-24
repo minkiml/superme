@@ -75,7 +75,7 @@ say so in one line and do not pad it with the plan**) · `resources/index.md`. B
 roadmap carry the weight; architecture's components and flows grow as code lands.
 `verification.md` is **not yours to write** — it holds checks this repo has actually proven, and a
 fresh project has none. It fills itself as items close.
-After drafting `architecture.md`, call `suggest_assets` with its text — it auto-adopts the confidently-relevant
+After drafting `architecture.md`, call `adopt_knowledge_assets` with its text — it auto-adopts the confidently-relevant
 pooled assets for this repo; note which were adopted (the owner curates them later in the dashboard).
 
 ## Step 6: Approval gate

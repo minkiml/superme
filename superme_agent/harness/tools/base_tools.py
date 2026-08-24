@@ -1,6 +1,6 @@
 """Base in-process tools — available in EVERY mode, unlike `dev_tools.py`.
 
-`pull_constitution` is the on-demand loader for the frontmatter-first model. Chosen over raw `Read`
+`read_constitution` is the on-demand loader for the frontmatter-first model. Chosen over raw `Read`
 so it is scope-safe and exposes no harness paths.
 """
 
@@ -23,16 +23,16 @@ def _err(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}], "is_error": True}
 
 
-class PullConstitutionArgs(TypedDict, total=False):
+class ReadConstitutionArgs(TypedDict, total=False):
     name: Required[Annotated[str, "the constitution's name, exactly as listed in the catalog"]]
 
 
-def _pull_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None,
+def _read_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None,
                        activated: set | None = None, **_):
     """Resolve a catalog name to the item's full body.
 
     Scope is the dirs and active-set bound here, so an out-of-scope name simply misses."""
-    async def pull_constitution(args: dict) -> dict:
+    async def read_constitution(args: dict) -> dict:
         name = str(args.get("name") or "").strip()
         if not name:
             return _err("Pass `name` — the constitution to load (see the catalog).")
@@ -44,20 +44,20 @@ def _pull_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None,
             ) or "(none)"
             return _err(f"No in-scope constitution named '{name}'. Available: {avail}")
         return _ok(it["body"])
-    return pull_constitution
+    return read_constitution
 
 
-class SuggestAssetsArgs(TypedDict, total=False):
+class AdoptKnowledgeAssetsArgs(TypedDict, total=False):
     spec: Required[Annotated[str, "the project spec / stack / approach text to match against"]]
     limit: Annotated[int, "max suggestions to return (default 8)"]
 
 
-def _suggest_assets(*, activated: set | None = None, repo_dir: Path | None = None, **_):
+def _adopt_knowledge_assets(*, activated: set | None = None, repo_dir: Path | None = None, **_):
     """Relevance-rank the shared ASSET POOL against the project spec and auto-adopt the confidently
     relevant ones.
 
     Confident means the spec shares a term with the asset's slug or description."""
-    async def suggest_assets(args: dict) -> dict:
+    async def adopt_knowledge_assets(args: dict) -> dict:
         spec = str(args.get("spec") or "").strip()
         if not spec:
             return _err("Pass `spec` — the project's stack/approach text to match against.")
@@ -88,25 +88,26 @@ def _suggest_assets(*, activated: set | None = None, repo_dir: Path | None = Non
         if not out:
             return _ok("The relevant assets are already active for this repo; nothing new to adopt.")
         return _ok("\n".join(out))
-    return suggest_assets
+    return adopt_knowledge_assets
 
 
 BASE_TOOLS: list[ToolSpec] = [
     ToolSpec(
-        "pull_constitution",
-        "Load one constitution item's full body by name, taken from the catalog already in front "
-        "of you. Use it when the catalog line alone does not tell you what the rule requires. It "
-        "resolves names from that catalog only — a name that is not in scope simply misses, and "
-        "it reads nothing else on disk.",
-        PullConstitutionArgs, _pull_constitution,
+        "read_constitution",
+        "Loads one constitution item's full body by name. Use it when the catalog line in front "
+        "of you does not say what the rule actually requires. Do not use it to read any other "
+        "file: it resolves names from that catalog only, and a name outside your scope simply "
+        "misses. Returns the item's full body text.",
+        ReadConstitutionArgs, _read_constitution,
     ),
     ToolSpec(
-        "suggest_assets",
-        "Search and rank the shared knowledge-asset pool against a project spec and auto-adopt the "
-        "confidently-relevant items for this repo. This tool WRITES the repo's adopted-asset list — "
-        "call it only during project onboarding (project-init / retrofit, after drafting architecture.md), "
-        "never in ordinary chat; the owner curates the adopted set afterwards.",
-        SuggestAssetsArgs, _suggest_assets,
+        "adopt_knowledge_assets",
+        "Ranks the shared knowledge-asset pool against a project spec and adopts the clearly "
+        "relevant items for this repo. Use it once while onboarding a project, after its "
+        "architecture is drafted. Do not use it in ordinary chat: it writes the repo's adopted- "
+        "asset list, which the owner then curates. Returns the assets adopted and the others that "
+        "looked relevant.",
+        AdoptKnowledgeAssetsArgs, _adopt_knowledge_assets,
     ),
 ]
 
@@ -115,6 +116,6 @@ def make_base_mcp_server(mode: str, universal_dir: Path, repo_dir: Path | None,
                          activated: set | None = None):
     """Build the `superme` MCP server, bound to this host's constitution homes and activated assets.
 
-    So `pull_constitution` and `suggest_assets` only ever serve in-scope items."""
+    So `read_constitution` and `adopt_knowledge_assets` only ever serve in-scope items."""
     return build_mcp_server("superme", BASE_TOOLS, mode=mode,
                             universal_dir=universal_dir, repo_dir=repo_dir, activated=activated)

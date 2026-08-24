@@ -155,7 +155,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                  model: str, effort: str) -> tuple[dict | None, int | None, dict | None]:
     """Run one background deputy turn and return (verdict|None, tokens, usage).
 
-    None when the run made no valid `deputy_verdict` call, which the caller reads as could-not-judge."""
+    None when the run made no valid `submit_gate_verdict` call, which the caller reads as could-not-judge."""
     item_dir = dev_root / "work-items" / item_id
     strictness = _spine.get_deputy_strictness(gate)
     # The context the deputy judges from — assembled from durable state, nothing inherited.
@@ -200,7 +200,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     final_tokens = None
     final_usage = None
     live = LiveTokens()
-    sink: dict = {}   # the deputy_verdict tool (run_tools) lands the verdict here
+    sink: dict = {}   # the verdict tool (run_tools) lands the verdict here
     turn = ResilientTurn("deputy judge", item_id=item_id,
                          notify=retry_notice(context_id, item_id, gate))
     # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.

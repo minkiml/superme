@@ -421,9 +421,9 @@ def test_tool_registration() -> None:
     ok("S2 tools registered",
        names == {"scaffold_artifact", "record_verification", "write_checkpoint",
                  "record_validation",   # build's self-check as DATA, so vet can audit the claim
-                 "dry_run_checks",      # …and plan's smoke test of the `run:` blocks it just wrote
+                 "check_plan_commands",      # …and plan's smoke test of the `run:` blocks it just wrote
                 "sync_from_anchor_branch",                   # joined later
-                "apply_knowledge_delta",    # joined later
+                "apply_knowledge_edits",    # joined later
                 "set_triage_classification",                 # joined in the audit batch
                 "file_vet_report",                           # joined later 
                 "revise_plan",                               # joined in renovation slice D

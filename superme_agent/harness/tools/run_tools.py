@@ -195,7 +195,7 @@ def _report_completion(*, completion_sink: dict | None = None, **_):
     return report_completion
 
 
-# --------------------------------------------------------------------------- deputy_verdict
+# --------------------------------------------------------------------------- submit_gate_verdict
 
 class VerdictMachine(TypedDict, total=False):
     decision: Required[Annotated[Literal["approve", "send_back", "escalate"],
@@ -256,18 +256,18 @@ class VerdictUser(TypedDict, total=False):
     escalation: Annotated[VerdictEscalation, "escalate only — the owner's page card"]
 
 
-class DeputyVerdictArgs(TypedDict, total=False):
+class SubmitGateVerdictArgs(TypedDict, total=False):
     machine: Required[Annotated[VerdictMachine, "carried out as given; never shown to the owner"]]
     user: Required[Annotated[VerdictUser, "the Deputy sub-tab's approval-trace row — never "
                                           "routed on"]]
 
 
-def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
+def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):
     """Validate and deliver the deputy's verdict, flattened to what the executor acts on.
 
     Cross-field floor: `change` iff send_back, `escalation` iff escalate, `authorize` only with
     send_back."""
-    async def deputy_verdict(args: dict) -> dict:
+    async def submit_gate_verdict(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}
         decision = str(machine.get("decision") or "").strip()
@@ -315,17 +315,17 @@ def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
                 "change": change, "authorize": authorize, "escalation": escalation_text,
             }
         return _ok("ok")
-    return deputy_verdict
+    return submit_gate_verdict
 
 
 # --------------------------------------------------------------------------- servers
 
 REPORT_COMPLETION_TOOL = ToolSpec(
     "report_completion",
-    "Declare how this run ended: the outcome that routes the work onward, and the one-line "
-    "summary the owner reads. Call it exactly once, as this run's final action. A run that never "
-    "calls it is recorded as undeclared, and nothing downstream learns what happened. It reports "
-    "an ending — it does not advance the item or carry out whatever comes next.",
+    "Declares how this run ended: the outcome that routes the work onward, and the one-line "
+    "summary the owner reads. Call it exactly once, as this run's final action; a run that never "
+    "calls it is recorded as undeclared. Do not use it to advance the item, or to carry out what "
+    "comes next. Returns an acknowledgement only.",
     ReportCompletionArgs, _report_completion,
     examples=({"machine": {"outcome": "success", "counts": {"tasks_done": 4, "checks_passed": 6},
                            "pointers": ["artifacts/plan.md"]},
@@ -333,13 +333,13 @@ REPORT_COMPLETION_TOOL = ToolSpec(
                         "next": "Waiting on your review."}},),
 )
 
-DEPUTY_VERDICT_TOOL = ToolSpec(
-    "deputy_verdict",
-    "Deliver the verdict on the gate you were asked to judge — approve it, send it back, or "
+SUBMIT_GATE_VERDICT_TOOL = ToolSpec(
+    "submit_gate_verdict",
+    "Delivers the verdict on the gate you were asked to judge: approve it, send it back, or "
     "escalate to the owner. Call it exactly once, as this dispatch's final action; the decision "
-    "is carried out as given. Do not use it to do the work yourself, to change the plan, or to "
-    "judge any gate other than the one named.",
-    DeputyVerdictArgs, _deputy_verdict,
+    "is carried out as given. Do not use it to do the work, change the plan, or judge any gate "
+    "but the one named. Returns an acknowledgement only.",
+    SubmitGateVerdictArgs, _submit_gate_verdict,
 )
 
 
@@ -350,5 +350,5 @@ def make_run_report_server(sink: dict):
 
 
 def make_deputy_verdict_server(sink: dict):
-    """The `deputy` MCP server (deputy_verdict only), bound to one dispatch's sink."""
-    return build_mcp_server("deputy", [DEPUTY_VERDICT_TOOL], verdict_sink=sink)
+    """The `deputy` MCP server (the verdict tool only), bound to one dispatch's sink."""
+    return build_mcp_server("deputy", [SUBMIT_GATE_VERDICT_TOOL], verdict_sink=sink)

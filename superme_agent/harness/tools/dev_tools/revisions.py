@@ -22,16 +22,16 @@ class KnowledgeOpArg(TypedDict):
                              "stripped). For rename_section: the new heading TEXT, one line, no `##`")]
 
 
-class ApplyKnowledgeDeltaArgs(TypedDict, total=False):
+class ApplyKnowledgeEditsArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     ops: Required[Annotated[list[KnowledgeOpArg],
                             ("the edit ops — validated, then written to the anchor docs and "
                              "recorded in this week's change log. A rejection writes nothing")]]
 
 
-def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
+def _apply_knowledge_edits(*, store, context_id, dev_root=None, repo_dir=None,
                            bound_item_id=None, **_):
-    async def apply_knowledge_delta(args: dict) -> dict:
+    async def apply_knowledge_edits(args: dict) -> dict:
         from pathlib import Path
         from ....core import knowledge_delta as _kd
         from ....core import verification_library as _vl
@@ -97,7 +97,7 @@ def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                         meta={**res, "change_log": log_path})
         return _ok(f"Written: {res['applied']} op(s) → {', '.join(res['docs'])}, and this week's "
                    f"change log has the entry. Say in your close report what the docs now claim.")
-    return apply_knowledge_delta
+    return apply_knowledge_edits
 
 
 class PlanOpArg(TypedDict, total=False):

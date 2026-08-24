@@ -159,7 +159,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
     from ....harness.tools.base_tools import BASE_TOOLS
     from ....harness.tools.dev_tools import dev_tool_specs
     from ....harness.tools.registry import describe_specs
-    from ....harness.tools.run_tools import DEPUTY_VERDICT_TOOL, REPORT_COMPLETION_TOOL
+    from ....harness.tools.run_tools import SUBMIT_GATE_VERDICT_TOOL, REPORT_COMPLETION_TOOL
     from ....paths import DEV_PLUGIN_DIR
 
     skills: list[dict] = []
@@ -178,7 +178,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
     except KeyError:
         dev_specs = []
     by_server = {"superme": BASE_TOOLS, "dev": dev_specs,
-                 "run": [REPORT_COMPLETION_TOOL], "deputy": [DEPUTY_VERDICT_TOOL]}
+                 "run": [REPORT_COMPLETION_TOOL], "deputy": [SUBMIT_GATE_VERDICT_TOOL]}
     tools: list[dict] = []
     for server in sorted(set(mcp) | {"superme"}):
         specs = by_server.get(server)

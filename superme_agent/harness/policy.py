@@ -16,12 +16,12 @@ SAFE_TOOLS = {
     "Read", "Glob", "Grep", "NotebookRead",
     "WebSearch", "WebFetch", "TodoWrite", "Skill", "Agent",
     # Read-only pulls. The frontmatter-first model depends on these being cheap.
-    "mcp__superme__pull_constitution",
-    "mcp__superme__suggest_assets",
+    "mcp__superme__read_constitution",
+    "mcp__superme__adopt_knowledge_assets",
     # The sanctioned structured endings of a kernel-fired run; a prompt here would park every
     # background run.
     "mcp__run__report_completion",
-    "mcp__deputy__deputy_verdict",
+    "mcp__deputy__submit_gate_verdict",
     # Read-only dev readers, scoped to this repo. A denial makes a run work blind, never stops it.
     "mcp__dev__read_dev_log",
     "mcp__dev__read_inbox",
@@ -36,7 +36,7 @@ SAFE_TOOLS = {
     "mcp__dev__append_inbox_item",
     # Learning-pipeline pens: DB-only and pre-gate. Publishing to disk is the owner-gated step.
     "mcp__dev__file_candidate",
-    "mcp__dev__propose_memory",
+    "mcp__dev__propose_learning",
     "mcp__dev__merge_into_proposal",
     "mcp__dev__drop_candidates",
     "mcp__dev__stage_artifact",
@@ -45,7 +45,7 @@ SAFE_TOOLS = {
     "mcp__dev__scaffold_artifact",
     "mcp__dev__record_verification",
     "mcp__dev__record_validation",
-    "mcp__dev__dry_run_checks",
+    "mcp__dev__check_plan_commands",
     "mcp__dev__record_diagnosis",
     "mcp__dev__record_lens",
     "mcp__dev__nominate_check",
@@ -58,7 +58,7 @@ SAFE_TOOLS = {
     # Merges trunk INTO the item's own worktree only; conflicts abort and report.
     "mcp__dev__sync_from_anchor_branch",
     # Stages edit ops item-local, applied later and atomically with the owner's merge.
-    "mcp__dev__apply_knowledge_delta",
+    "mcp__dev__apply_knowledge_edits",
     # Writes only the item's own plan.md, through validated ops — the re-plan's only way to change
     # it.
     "mcp__dev__revise_plan",

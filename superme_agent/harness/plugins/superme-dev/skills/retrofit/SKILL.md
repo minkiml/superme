@@ -92,7 +92,7 @@ an empty ledger is honest, an invented one is not) · `roadmap.md` (**forward-on
 `resources/index.md`. `verification.md` is **not yours to write** — it holds checks SuperMe has
 actually run and seen pass here, and a repo being retrofitted has none yet however good its existing
 test suite is; note the suite in `architecture.md` instead. After drafting `architecture.md`, call
-`suggest_assets` with its text — it auto-adopts the confidently-relevant pooled assets for this repo;
+`adopt_knowledge_assets` with its text — it auto-adopts the confidently-relevant pooled assets for this repo;
 note which were adopted (the owner curates them later in the dashboard).
 
 ## Step 6: Verify against the code

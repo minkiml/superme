@@ -379,7 +379,7 @@ def test_deputy(tmp: Path) -> None:
     # Valid decisions land in the sink; an invalid call errors back to the agent and falls to the
     # owner.
     sink: dict = {}
-    call = RT._deputy_verdict(verdict_sink=sink)
+    call = RT._submit_gate_verdict(verdict_sink=sink)
     r = asyncio.run(call({"machine": {"decision": "approve", "gate": "plan"},
                           "user": {"checked": "read plan.md tasks", "because": "sound"}}))
     v = sink.get("verdict")
@@ -419,7 +419,7 @@ def test_deputy(tmp: Path) -> None:
     p = KS.deputy_preamble("extra")
     ok("preamble carries identity+floor", "Deputy" in p and "must NOT approve" in p)
     ok("preamble injects the level", "extra" in p and "plumbing" in p)
-    ok("preamble names the verdict tool", "deputy_verdict" in p)
+    ok("preamble names the verdict tool", "submit_gate_verdict" in p)
     p_lo = KS.deputy_preamble("low")
     ok("strictness band varies by level", "maximum delegated autonomy" in p_lo.lower())
     ok("unknown strictness falls back to medium",

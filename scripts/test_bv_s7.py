@@ -579,9 +579,9 @@ def test_decision_bubbles() -> None:
     ok("a headline is capped, never a wall", len(D._headline("x" * 500)) <= 241)
 
     # The cap is enforced at the SOURCE too: a stated limit that nothing checks is a suggestion.
-    from superme_agent.harness.tools.run_tools import _deputy_verdict
+    from superme_agent.harness.tools.run_tools import _submit_gate_verdict
     sink: dict = {}
-    verdict = _deputy_verdict(verdict_sink=sink)
+    verdict = _submit_gate_verdict(verdict_sink=sink)
     args = {"machine": {"decision": "approve", "gate": "plan"},
             "user": {"checked": "plan.md, the evidence ledger", "because": "x" * 260}}
     out = asyncio.run(verdict(args))

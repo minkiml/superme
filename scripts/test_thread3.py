@@ -110,7 +110,7 @@ def test_triggers() -> None:
        "> the feedback" in cases["phase_feedback"] and "DIGEST" in cases["phase_feedback"]
        and "superme-dev:plan" in cases["phase_feedback"])
     ok("close trigger names the close skill, the knowledge write, and mechanical clearance",
-       "superme-dev:close" in cases["close"] and "apply_knowledge_delta" in cases["close"]
+       "superme-dev:close" in cases["close"] and "apply_knowledge_edits" in cases["close"]
        and "the kernel clears the item" in cases["close"])
     ok("resolve keeps the conflict procedure (task policy, not narration)",
        "conflict marker" in cases["resolve"] and "Do NOT run git commands" in cases["resolve"]

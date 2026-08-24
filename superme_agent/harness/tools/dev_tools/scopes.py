@@ -2,9 +2,9 @@
 
 from ..registry import ToolSpec, build_mcp_server
 from .learning import (DevLogArgs, DropCandidatesArgs, FileCandidateArgs, MergeProposalArgs,
-                       ProposeMemoryArgs, ReadRunArgs, ReviewCandidatesArgs, ReviewProposalsArgs,
+                       ProposeLearningArgs, ReadRunArgs, ReviewCandidatesArgs, ReviewProposalsArgs,
                        StageArtifactArgs, _dev_log, _drop_candidates, _file_candidate,
-                       _merge_into_proposal, _propose_memory, _read_run, _review_candidates,
+                       _merge_into_proposal, _propose_learning, _read_run, _review_candidates,
                        _review_proposals, _stage_artifact)
 from .inbox import (AppendInboxItemArgs, CreateInboxItemArgs, InboxArgs, ItemizeAndLaunchArgs,
                     PushInboxItemArgs, _append_inbox_item, _create_inbox_item,
@@ -12,169 +12,169 @@ from .inbox import (AppendInboxItemArgs, CreateInboxItemArgs, InboxArgs, Itemize
 from .items import (ScaffoldArtifactArgs, SetTriageClassificationArgs,
                     SyncFromAnchorBranchArgs, WriteCheckpointArgs, _scaffold_artifact,
                     _set_triage_classification, _sync_from_anchor_branch, _write_checkpoint)
-from .verification import (DryRunChecksArgs, NominateCheckArgs, ReadVerificationLibraryArgs,
+from .verification import (CheckPlanCommandsArgs, NominateCheckArgs, ReadVerificationLibraryArgs,
                            RecordDiagnosisArgs, RecordLensArgs, RecordValidationArgs,
-                           RecordVerificationArgs, _dry_run_checks, _nominate_check,
+                           RecordVerificationArgs, _check_plan_commands, _nominate_check,
                            _read_verification_library, _record_diagnosis, _record_lens,
                            _record_validation, _record_verification)
 from .records import (ReadDecisionsArgs, ReadResearchProposalsArgs, RequestAuthorizationArgs,
                       _read_decisions, _read_research_proposals, _request_authorization)
 from .reports import (FilePhaseReportArgs, FilePlanReportArgs, FileVetReportArgs,
                       _file_phase_report, _file_plan_report, _file_vet_report)
-from .revisions import (ApplyKnowledgeDeltaArgs, RevisePlanArgs, _apply_knowledge_delta,
+from .revisions import (ApplyKnowledgeEditsArgs, RevisePlanArgs, _apply_knowledge_edits,
                         _revise_plan)
 
 ITEM_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "set_triage_classification",
-        "Record a triage session's classification onto its work-item: the confirmed kind "
-        "(implementation | research) and, optionally, an EXISTING PRD deliverable it anchors to. "
-        "Triage phase only — after the triage-exit gate the kind is fixed.",
+        "Records this work-item's classification: its confirmed kind, scale, research family and "
+        "the deliverable it anchors to. Use it in the triage phase, once you have read the whole "
+        "ask. Do not use it after the triage gate, where the kind is fixed, and do not use it to "
+        "invent a deliverable the project has not confirmed. Returns what was recorded.",
         SetTriageClassificationArgs, _set_triage_classification,
     ),
     ToolSpec(
         "scaffold_artifact",
-        "Scaffold this work-item's artifact skeleton — the headings and the `<fill:…>` slots you "
-        "then fill in place. Use it once, before writing an artifact that does not exist yet. It "
-        "creates structure and no content, and it will not rewrite an artifact already written: "
-        "an existing plan is changed through `revise_plan`, never rescaffolded.",
+        "Creates this work-item's artifact skeleton: the headings and the fill slots you then "
+        "complete in place. Use it once, before writing an artifact that does not exist yet. Do "
+        "not use it on an artifact already written: an existing plan changes through "
+        "`revise_plan`. Returns the path and the sections whose slots you must fill.",
         ScaffoldArtifactArgs, _scaffold_artifact,
     ),
     ToolSpec(
-        "dry_run_checks",
-        "Run the `run:` blocks already written into this item's plan and report each exit code. "
-        "Records nothing: at plan time the work does not exist, so a failing assertion is the "
-        "expected answer — this catches the command that cannot run AT ALL, before a build⟷vet "
-        "cycle is spent discovering it.",
-        DryRunChecksArgs, _dry_run_checks,
+        "check_plan_commands",
+        "Runs the commands already written into this item's plan and reports each exit code. Use "
+        "it at the end of planning, to catch a command that cannot run at all before a build "
+        "cycle discovers it. Do not use it to judge the work: nothing is built yet, and nothing "
+        "is recorded. Returns each command with its result.",
+        CheckPlanCommandsArgs, _check_plan_commands,
     ),
     ToolSpec(
         "record_validation",
-        "Record one of BUILD's own validation runs — the command you ran, the machine result, "
-        "pass or fail. Use it for every check you run yourself while building: recorded as data, "
-        "the claim can later be re-executed and audited instead of taken on a sentence's word. "
-        "Record only a run you actually performed, never one you intend to, and never the "
-        "verification plan's own checks — those are executed and recorded by the vet pass.",
+        "Records one validation run you performed while building: the command, the machine "
+        "result, pass or fail. Use it for every check you run yourself, so the claim can later be "
+        "re-executed rather than believed. Do not use it for a run you only intend to make, or "
+        "for the verification plan's checks. Returns the entry and its cycle.",
         RecordValidationArgs, _record_validation,
     ),
     ToolSpec(
         "record_verification",
-        "Record ONE of the verification plan's checks, executed live: which check, how it ran, "
-        "the machine result, pass or fail. Use it once per check id in the plan, as you go. It "
-        "records what actually ran — never a check you reasoned through but did not execute — and "
-        "it is not build's own validation, which is already recorded and which you re-execute "
-        "rather than trust.",
+        "Records one of the verification plan's checks that you executed live. Use it once per "
+        "check id, as you go. Do not use it for a check you reasoned through but did not execute, "
+        "or for the build's own validation, which is recorded already. Returns the entry, its "
+        "cycle and the verdict so far.",
         RecordVerificationArgs, _record_verification,
     ),
     ToolSpec(
         "record_diagnosis",
-        "Record WHERE a failed check broke and WHY, plus what you could not determine. "
-        "Never the fix: build reasons that out inside the current plan. Required before the vet "
-        "report on every failing check, and it becomes the next build cycle's work order.",
+        "Records where a failed check broke and why, plus what you could not determine. Use it on "
+        "every failing check, before filing the vet report. Do not use it to record the fix: the "
+        "next build cycle reasons that out from this as its work order. Returns the diagnosis and "
+        "its cycle.",
         RecordDiagnosisArgs, _record_diagnosis,
     ),
     ToolSpec(
         "record_lens",
-        "Record one standing lens's read of this cycle — what you probed, and what it found "
-        "(nothing is a fine answer; never manufacture a finding). intent and safety gate on any "
-        "finding, robustness on a high one, performance never. Every cycle owes all three standing "
-        "lenses before the vet report will write.",
+        "Records one standing lens's read of this cycle: what you probed, and what it found. Use "
+        "it for all three standing lenses every cycle, since the vet report will not write "
+        "without them. Do not use it to manufacture a finding: nothing found is a complete "
+        "answer. Returns the entry, its cycle, and whether it gates.",
         RecordLensArgs, _record_lens,
     ),
     ToolSpec(
         "nominate_check",
-        "Nominate one of this item's checks for the repo's VERIFICATION LIBRARY — the catalogue "
-        "later items inherit from. Only a check that has actually passed here, and only when you "
-        "can say what it defends about the REPO without mentioning this item. You nominate; close "
-        "writes it in; the owner decides whether it becomes standing.",
+        "Nominates one of this item's checks for the repo's verification library, the catalogue "
+        "later items inherit from. Use it for a check that passed here and whose value you can "
+        "state about the repo without naming this item. Do not use it to add the entry yourself: "
+        "close writes it and the owner decides. Returns the nomination.",
         NominateCheckArgs, _nominate_check,
     ),
     ToolSpec(
         "read_verification_library",
-        "Read this repo's verification library: the standing entries (already attached to every "
-        "plan) and the available ones a plan can cite by id instead of re-authoring. At close, "
-        "pass item_id to also get this item's nominations rendered as ready-to-write entries.",
+        "Lists this repo's verification library: the standing entries already attached to every "
+        "plan, and the available ones a plan can cite by id. Use it while planning, to reuse a "
+        "check instead of authoring one. Do not use it to add an entry: that is `nominate_check`. "
+        "Returns the standing and available entries with their ids.",
         ReadVerificationLibraryArgs, _read_verification_library,
     ),
     ToolSpec(
         "read_decisions",
-        "Read this project's decision ledger — the choices the owner has already ruled on. Call it "
-        "BEFORE raising a question for the owner or scoping an item: a subject already settled here "
-        "is answered, and re-asking it spends a decision they already made. Returns the index by "
-        "default; pass `entry_id` for one entry in full.",
+        "Reads this project's decision ledger, the choices the owner has already ruled on. Use it "
+        "before raising a question or scoping an item, since a subject settled here is already "
+        "answered. Do not use it to record a decision. Returns the index of every decision, or "
+        "one full entry when entry_id is given.",
         ReadDecisionsArgs, _read_decisions,
     ),
     ToolSpec(
         "read_research_proposals",
-        "Read an approved research review's proposed work, already split into what you may file "
-        "and what you may not. A proposal that asks the owner a question and carries no answer is "
-        "NOT yours to file — report it as withheld. Use this instead of judging the report "
-        "yourself: the split is what stops a ticket claiming to be startable when its ruling was "
-        "never given.",
+        "Reads an approved research review's proposed work, split already into what you may file "
+        "and what you may not. Use it before filing anything from a research report, rather than "
+        "judging the report yourself. Do not use it to file a withheld proposal: one whose ruling "
+        "was never given only looks startable. Returns both lists and why each was withheld.",
         ReadResearchProposalsArgs, _read_research_proposals,
     ),
     ToolSpec(
         "request_authorization",
-        "Request authorization for a contract change you can't self-authorize (an owner-reserved "
-        "anchor-doc edit). The blocked vet check DEFERS instead of failing — never edit the vet "
-        "plan or force the change. It surfaces at review, where the owner or a delegated deputy "
-        "grants (routes back to you) or denies (accepts the gap).",
+        "Requests the owner's authorization for a contract change you cannot make yourself, such "
+        "as an edit to an owner-reserved anchor doc. Use it when a vet check is blocked by one, "
+        "so that check defers instead of failing. Do not use it to edit the vet plan or force the "
+        "change through. Returns the request and where it surfaces.",
         RequestAuthorizationArgs, _request_authorization,
     ),
     ToolSpec(
         "file_plan_report",
-        "File the plan gate's user report (plan phase, once the plan is finished): the coverage "
-        "matrix — every task and the checks that will prove it — plus the depth call and the "
-        "stats are derived from plan.md; you supply only the prose. A task with no check shows "
-        "as a gap, which is the point.",
+        "Files the report the owner reads at the plan gate. You supply the prose; the coverage "
+        "matrix comes from the plan itself. Use it once the plan is finished. Do not use it for "
+        "another phase's report, and do not hide a task that has no check: a gap shows on "
+        "purpose. Returns the path, the counts and the gaps.",
         FilePlanReportArgs, _file_plan_report,
     ),
     ToolSpec(
         "file_phase_report",
-        "File this phase's user-facing report — the document the owner reads at its gate. Hand "
-        "over the whole body, filled from this phase's template with every `<fill:…>` slot "
-        "replaced. It is written verbatim, and refused if a slot is left unfilled. It writes this "
-        "phase's report and no other, derives nothing, appends nothing, and a second call "
-        "overwrites the first.",
+        "Files the report the owner reads at this phase's gate. Hand over the whole body, filled "
+        "from this phase's template with every slot replaced. Use it once the phase's work is "
+        "done. Do not use it for another phase's report: the path is not yours to name, and an "
+        "unfilled slot is refused. Returns the path written.",
         FilePhaseReportArgs, _file_phase_report,
     ),
     ToolSpec(
         "file_vet_report",
-        "File the verification report (vet phase, after every check is recorded): the verdict "
-        "and check table are derived from the recorded entries; you supply only the "
-        "observations (real concerns, never fixes).",
+        "Files the verification report. You supply the observations; the verdict and check table "
+        "come from the entries already recorded. Use it after every check, diagnosis and lens is "
+        "recorded. Do not use it to propose fixes, or to report a check you never recorded. "
+        "Returns the path and the derived verdict.",
         FileVetReportArgs, _file_vet_report,
     ),
     ToolSpec(
         "write_checkpoint",
-        "Bank this thread's continuity checkpoint onto the work-item — what is being worked on, "
-        "what remains, what got decided, what to watch out for. Use it before a long session ends "
-        "or is compacted; a fresh session cold-starts from it. Record only what exists nowhere "
-        "else: point at the plan and the reports rather than copying them.",
+        "Banks this thread's continuity onto the work-item: what is being worked on, what "
+        "remains, what got decided, what to watch for. Use it before a long session ends or is "
+        "compacted. Do not use it to copy what the artifacts already hold: point at the plan and "
+        "the reports instead. Returns the checkpoint's path.",
         WriteCheckpointArgs, _write_checkpoint,
     ),
     ToolSpec(
         "sync_from_anchor_branch",
-        "Merge the repo's anchor branch into this work-item's branch, so the build is working "
-        "against current trunk code. Run it partway through a long build and again before "
-        "delivering; it needs a clean tree, so commit first. It never pushes, never merges the "
-        "item back, and on a conflict it aborts and leaves the tree untouched.",
+        "Merges the repo's anchor branch into this work-item's branch, so the build runs against "
+        "current trunk code. Use it partway through a long build and before delivering, from a "
+        "clean tree. Do not use it to push, or to merge the item back: a conflict aborts and "
+        "leaves your tree untouched. Returns the merge commit, or that you were current.",
         SyncFromAnchorBranchArgs, _sync_from_anchor_branch,
     ),
     ToolSpec(
-        "apply_knowledge_delta",
-        "Write this item's changes into the general dev-knowledge anchor docs (structured edit "
-        "ops), and record the entry in this week's change log. Close-phase only, and the only way "
-        "those docs ever change — never edit them directly.",
-        ApplyKnowledgeDeltaArgs, _apply_knowledge_delta,
+        "apply_knowledge_edits",
+        "Writes this item's changes into the project's dev-knowledge anchor docs and logs the "
+        "entry for the week. Use it in the close phase, as the only way those docs ever change. "
+        "Do not use it in another phase, and do not edit those docs directly. Returns the ops "
+        "applied and the docs touched.",
+        ApplyKnowledgeEditsArgs, _apply_knowledge_edits,
     ),
     ToolSpec(
         "revise_plan",
-        "Fold review feedback into an EXISTING plan.md — the only way a re-plan changes it. One "
-        "entry per concern, each with its own scope (resume | targeted | redesign), so redesigning "
-        "one part never resets the progress another part earned. Never rewrite the file: `## Tasks` "
-        "takes task-level ops so the `- [x]` build earned survives. Appends the revision block the "
-        "next build reads first, and opens a fresh build⟷vet generation.",
+        "Folds review feedback into an existing plan, one entry per concern, each with its own "
+        "scope so redesigning one part does not reset another's progress. Use it when a gate "
+        "sends the item back to plan. Do not use it to rewrite the file: task-level ops keep the "
+        "progress build has earned. Returns the revision id and what changed.",
         RevisePlanArgs, _revise_plan,
         examples=({
             "item_id": "a1b2c3d4e5f6",
@@ -204,81 +204,74 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
 MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "read_dev_log",
-        "This repo's dev activity log — the cross-run record of what has happened in its dev work "
-        "over time (agent runs, learning steps, inbox and work-item changes, constitution and "
-        "asset edits), newest first. Use it to find out WHEN something happened or whether work "
-        "already exists. It is not the content of that work: an artifact is read at its path, and "
-        "one run's tool-by-tool trail is `read_run`.",
+        "Lists this repo's dev activity: agent runs, learning steps, inbox and work-item changes, "
+        "newest first. Use it when you need to know when something happened, or whether work on "
+        "it already exists. Do not use it to read the work itself: an artifact is read at its "
+        "path, one run's trail with `read_run`. Returns the matching log rows.",
         DevLogArgs, _dev_log,
     ),
     ToolSpec(
         "read_inbox",
-        "Read this repo's inbox, open first. TWO kinds share it: `item` — a capture awaiting the "
-        "owner's push into real work — and `note`, the owner's own jotting, which is never pushed "
-        "and never becomes work. A note is there to be TALKED ABOUT: when the owner refers to one, "
-        "read it and pick the conversation up from there.",
+        "Lists this repo's inbox, open items first. An item is a capture awaiting the owner's "
+        "push into real work; a note is the owner's own jotting and never becomes work. Use it "
+        "before filing anything, and whenever the owner refers to a note. Do not use it to push "
+        "an item onward. Returns the matching rows and their ids.",
         InboxArgs, _list_inbox,
     ),
     ToolSpec(
         "read_candidates",
-        "Read the CANDIDATE pool — single learnings capture filed from one conversation each, "
-        "newest first, before anyone has judged them. Use it at the start of a distill pass, to "
-        "see what is waiting. It does not return proposals: a candidate already consolidated into "
-        "one is read with `read_proposals`. Reading changes nothing; dropping is "
-        "`drop_candidates`.",
+        "Lists the candidate pool: single learnings filed from one conversation each, newest "
+        "first, before anyone has judged them. Use it at the start of a distill pass, to see what "
+        "is waiting. Do not use it to read proposals: a candidate already consolidated into one "
+        "is read with `read_proposals`. Returns the matching candidates and their ids.",
         ReviewCandidatesArgs, _review_candidates,
     ),
     ToolSpec(
         "read_proposals",
-        "Read the OPEN proposals — consolidated learnings standing at the owner's gate, newest "
-        "first. Use it BEFORE filing a new one, so a learning that recurs strengthens an existing "
-        "proposal instead of minting a near-duplicate beside it. It does not return the raw "
-        "candidates behind them (`read_candidates`), and never one the owner has settled.",
+        "Lists the open learning proposals standing at the owner's gate, newest first. Use it "
+        "before filing a new one, so a learning that recurs strengthens an existing proposal. Do "
+        "not use it to read the raw candidates behind them: that is `read_candidates`. Returns "
+        "each open proposal with its id and status.",
         ReviewProposalsArgs, _review_proposals,
     ),
     ToolSpec(
         "read_run",
-        "Read ONE run's execution trace — the prompt, replies, tool calls and outcome of a single "
-        "run. Pass a run_id, or omit it to list recent runs and pick one. Use it to find out what "
-        "an individual run actually did. For activity across many runs use `read_dev_log`; this "
-        "is read-only and re-runs nothing.",
+        "Reads one run's execution trace: its prompt, replies, tool calls and outcome. Use it "
+        "when you need to know what a particular run actually did. Do not use it to survey "
+        "activity across many runs: that is `read_dev_log`. Returns the full trace for a run_id, "
+        "or a list of recent runs when run_id is omitted.",
         ReadRunArgs, _read_run,
     ),
     ToolSpec(
         "create_inbox_item",
-        "File ONE inbox ticket for real work that surfaced in this discussion — the sanctioned way "
-        "to itemize, and the branch-off front door (pass spawned_from_item + relation: "
-        "blocking/parallel auto-push into a child work-item, spawn waits for the owner). Check "
-        "`read_inbox` first: work an open item already covers is added to it with "
-        "`append_inbox_item`, not filed again. Filing is not starting — you author the ticket and "
-        "stop. A decision already made is not work and does not belong here.",
+        "Files one inbox ticket for work that came up in this conversation, and branches work off "
+        "the current item. Use it once the discussion settles on something to be done later. Do "
+        "not use it to begin that work, to duplicate an item that already covers it, or to record "
+        "a decision already made. Returns the new item's id.",
         CreateInboxItemArgs, _create_inbox_item,
     ),
     ToolSpec(
         "append_inbox_item",
-        "Add what THIS discussion newly says to an inbox item that already covers the work. Use it "
-        "when `read_inbox` matched an item missing a facet you have just settled — that is how a "
-        "near-duplicate is avoided. The addition lands under the existing text: it never edits or "
-        "replaces a word of it, so do not restate what the item already says.",
+        "Adds what this discussion newly says to an inbox item that already covers the work. Use "
+        "it when `read_inbox` matched an item missing something you have just settled. Do not use "
+        "it to correct or replace the existing text: the addition lands underneath it untouched. "
+        "Returns the item's id and title.",
         AppendInboxItemArgs, _append_inbox_item,
     ),
     ToolSpec(
         "push_inbox_item",
-        "Push an OPEN inbox item into the workspace: mints its work-item and starts the autonomous "
-        "triage→plan→build⟷vet→review flow on it — the same act as the Push button on the inbox "
-        "card. Use it when the owner has named a specific item and told you to start it; never on "
-        "your own initiative, and never as a follow-on to create_inbox_item (a freshly filed item is "
-        "theirs to review first). Takes the item's numeric id from read_inbox and returns the new "
-        "work-item id plus whether its first triage run started. Refused inside a work-item session — "
-        "there, a branch-off via create_inbox_item is the way to spin work off.",
+        "Turns an open inbox item into a work-item and starts its unattended triage, plan, build, "
+        "vet and review flow. Use it when the owner names an item and tells you to start it. Do "
+        "not use it on your own initiative, straight after filing an item, or inside a work-item "
+        "session. Returns the new work-item id and whether triage started.",
         PushInboxItemArgs, _push_inbox_item,
     ),
     ToolSpec(
         "itemize_and_launch",
-        "Launch a cohort of autopilot work-items from a settled onboarding plan — one call creates "
-        "them all, wired by their dependency edges, each born on autopilot and flowing "
-        "triage→plan→build⟷vet→review with no human until a review gate. The end-of-onboarding "
-        "step; use ONLY after the owner has confirmed the item list.",
+        "Creates a whole cohort of work-items from a settled onboarding plan, wired by their "
+        "dependency edges and each running unattended until its review gate. Use it once, after "
+        "the owner has confirmed the item list. Do not use it to file a single ticket: that is "
+        "`create_inbox_item`. Returns every item created with its id.",
         ItemizeAndLaunchArgs, _itemize_and_launch,
     ),
 ]
@@ -288,28 +281,27 @@ MAIN_DEV_TOOLS: list[ToolSpec] = [
 LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
-        "File ONE durable operational learning found in the conversation slice being swept — a "
-        "candidate, not a decision. Use it for a lesson that would still change what an agent does "
-        "in a future run. Do not use it to record what happened, and do not decide what form the "
-        "learning should take: consolidation and form are distill's call, later.",
+        "Files one durable operational learning found in the conversation slice being swept. Use "
+        "it for a lesson that would still change what an agent does in a future run. Do not use "
+        "it to record what happened, or to decide what form the learning should take: "
+        "consolidation and form come later. Returns the candidate's id.",
         FileCandidateArgs, _file_candidate,
     ),
     ToolSpec(
         "stage_artifact",
-        "Stage the finished artifact you authored for this proposal: the whole file body, plus "
-        "the eval report that is the reviewer's evidence. Call it once, as this run's last "
-        "action. It marks the proposal drafted and writes nothing to disk — adoption stays the "
-        "owner's decision at the gate.",
+        "Stages the finished artifact you authored for this proposal, with the eval report that "
+        "is the reviewer's evidence. Use it once, as this run's last action. Do not use it before "
+        "the artifact passes lint, and do not expect it to publish: nothing reaches disk until "
+        "the owner's gate. Returns the proposal id and its drafted status.",
         StageArtifactArgs, _stage_artifact,
     ),
     ToolSpec(
-        "propose_memory",
-        "File ONE consolidated operational-learning proposal from candidates you have read — the "
-        "artifact the owner gates. Use it only for a learning no open proposal already covers; "
-        "when one does, fold into it with `merge_into_proposal` rather than filing a parallel "
-        "proposal. It files a proposal and applies nothing — whether the artifact is ever written "
-        "is the owner's decision at the gate.",
-        ProposeMemoryArgs, _propose_memory,
+        "propose_learning",
+        "Files one consolidated learning proposal from candidates you have read. Use it only for "
+        "a learning no open proposal already covers. Do not use it when one does: fold into that "
+        "with `merge_into_proposal` instead of filing a parallel proposal. Returns the proposal's "
+        "id, its target form and scope, and that nothing is applied yet.",
+        ProposeLearningArgs, _propose_learning,
         examples=({
             "title": "Name the branch before editing shared config",
             "body": "Three runs edited the shared config on the trunk and had to be reverted...",
@@ -327,18 +319,19 @@ LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "merge_into_proposal",
-        "Fold new candidates into an EXISTING open proposal — how a learning seen again across "
-        "runs strengthens one proposal instead of spawning near-duplicates. Use it when "
-        "`read_proposals` shows one already covering the same learning. It cannot create a "
-        "proposal (`propose_memory`) and cannot touch one the owner has already settled.",
+        "Folds new candidates into an existing open proposal, so a learning seen again across "
+        "runs strengthens one instead of spawning near-duplicates. Use it when `read_proposals` "
+        "shows a proposal already covering the same learning. Do not use it to create a proposal, "
+        "or to touch one the owner has settled. Returns the proposal's id, candidate count and "
+        "status.",
         MergeProposalArgs, _merge_into_proposal,
     ),
     ToolSpec(
         "drop_candidates",
-        "Permanently drop candidates that fail the distill gate — self-recitation, a restatement "
+        "Permanently removes candidates that fail the distill gate: self-recitation, restatements "
         "of the obvious, anything too thin to become an artifact. Use it on candidates you have "
-        "just read, in a distill pass. The drop cannot be undone, so a candidate you are unsure "
-        "about is left in the pool rather than dropped.",
+        "just read. Do not use it on one you are unsure about, since the drop cannot be undone. "
+        "Returns how many were dropped.",
         DropCandidatesArgs, _drop_candidates,
     ),
 ]
@@ -359,7 +352,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     # --- the item phases: scope name == the skill the run fires ---
     "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item",
                "read_decisions", "file_phase_report"),
-    "plan": ("scaffold_artifact", "dry_run_checks", "read_verification_library",
+    "plan": ("scaffold_artifact", "check_plan_commands", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"),
     "build": ("record_validation", "request_authorization", "sync_from_anchor_branch",
               "write_checkpoint",
@@ -368,7 +361,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
             "read_verification_library", "file_vet_report"),
     "review": ("scaffold_artifact", "request_authorization", "read_decisions",
                "file_phase_report"),
-    "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item",
+    "close": ("apply_knowledge_edits", "read_verification_library", "create_inbox_item",
               "file_phase_report"),
     "investigate": ("scaffold_artifact", "write_checkpoint", "read_decisions",
                     "file_phase_report"),
@@ -381,7 +374,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     "resolve": ("read_dev_log",),                       # merge-conflict resolution: git work, no pens
     # --- the disposable learning runs (learning.py), one scope each ---
     "capture": ("file_candidate", "read_dev_log"),
-    "distill": ("read_candidates", "read_proposals", "propose_memory", "merge_into_proposal",
+    "distill": ("read_candidates", "read_proposals", "propose_learning", "merge_into_proposal",
                 "drop_candidates"),
     "write": ("stage_artifact",),
 }

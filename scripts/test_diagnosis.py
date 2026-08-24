@@ -186,9 +186,12 @@ def test_wiring():
     ok("the build runner passes the causes into the trigger", "diagnoses=found" in build)
     ok("…for failing checks only", 'not r["passed"]' in build and 'r.get("why")' in build)
 
-    tools = src("superme_agent/harness/tools/dev_tools.py")
-    ok("vet has a pen for it", '"record_diagnosis"' in tools)
-    ok("…whose description forbids the fix", "Never the fix" in tools)
+    from superme_agent.harness.tools.dev_tools import _BY_NAME
+    ok("vet has a pen for it", "record_diagnosis" in _BY_NAME)
+    # The wording is free to change; the prohibition naming the fix is not.
+    forbids = [s for s in _BY_NAME["record_diagnosis"].description.split(". ")
+               if s.startswith("Do not use it") and "fix" in s]
+    ok("…whose description rules the fix out of it", bool(forbids))
     ok("…and it never prompts a human mid-loop",
        "mcp__dev__record_diagnosis" in src("superme_agent/harness/policy.py"))
 

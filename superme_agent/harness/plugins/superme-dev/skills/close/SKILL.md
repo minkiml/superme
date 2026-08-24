@@ -34,7 +34,7 @@ anchor docs — which describe what is IN the main tree — owe it nothing; the 
 Its conclusions already live in its own report, and they reach the docs later through the work that
 acts on them. Go to step 3.
 
-`apply_knowledge_delta(item_id, ops)` — one call, all ops, validated then written. A refusal is
+`apply_knowledge_edits(item_id, ops)` — one call, all ops, validated then written. A refusal is
 itemized and writes nothing; fix the named op and call again.
 
 - **Write what is TRUE OF MAIN NOW**, not what the item intended. A section you touch should read as

@@ -160,7 +160,7 @@ is settled here — decide and record the assumption — never left as a mid-bui
 
 ### 4d — Dry-run the `run:` blocks
 
-`dry_run_checks` runs only the blocks you just wrote and records nothing. A failing assertion is
+`check_plan_commands` runs only the blocks you just wrote and records nothing. A failing assertion is
 EXPECTED — the work does not exist yet. What you are looking for is a command that could not run AT
 ALL: a usage error, an import error, a path that is not there. That one will never come back green
 however well build does its job, and finding it now costs a second instead of a whole build⟷vet

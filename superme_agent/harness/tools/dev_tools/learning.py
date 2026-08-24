@@ -67,7 +67,7 @@ class ClarificationArg(TypedDict, total=False):
     blocking: Annotated[bool, "true when the artifact cannot be written until they answer"]
 
 
-class ProposeMemoryArgs(TypedDict, total=False):
+class ProposeLearningArgs(TypedDict, total=False):
     title: Required[Annotated[str, "short headline"]]
     body: Required[Annotated[str, "the consolidated proposal narrative"]]
     summary: Annotated[str, "purpose · usage · why-raised (one short para; for owner + write phase)"]
@@ -97,7 +97,7 @@ class MergeProposalArgs(TypedDict, total=False):
     title: Annotated[str, "an enriched headline; omit to keep the existing one"]
     body: Annotated[str, "the re-consolidated narrative, incorporating the new substance"]
     summary: Annotated[str, "refreshed purpose · usage · why-raised"]
-    fields: Annotated[dict, "updated form-specific fields, same shape as propose_memory"]
+    fields: Annotated[dict, "updated form-specific fields, same shape as propose_learning"]
     confidence: Annotated[Literal["high", "medium", "low"],
                           "refreshed confidence — recurrence usually raises it"]
 
@@ -259,8 +259,8 @@ def _obj(args: dict, k: str):
         return None
 
 
-def _propose_memory(*, store, context_id, **_):
-    async def propose_memory(args: dict) -> dict:
+def _propose_learning(*, store, context_id, **_):
+    async def propose_learning(args: dict) -> dict:
         title, body = _s(args, "title"), _s(args, "body")
         if not title or not body:
             return _err("A proposal needs both `title` and `body` (the consolidated proposal).")
@@ -291,7 +291,7 @@ def _propose_memory(*, store, context_id, **_):
         return _ok(
             f"Filed proposal #{prop['id']} ({prop['output_form']} → {prop['target_scope']}){src} "
             f"— status: proposed. Awaiting the owner gate; nothing applied yet.")
-    return propose_memory
+    return propose_learning
 
 
 def _review_proposals(*, store, context_id, **_):

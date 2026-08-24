@@ -200,7 +200,7 @@ def close_trigger(item_id: str, title: str) -> str:
     return (
         f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase. Run "
         f"superme-dev:close: reflect what LANDED into the general anchor docs through "
-        f"`apply_knowledge_delta` (nothing doc-worthy ⇒ write nothing), then write "
+        f"`apply_knowledge_edits` (nothing doc-worthy ⇒ write nothing), then write "
         f"`reports/report-close.md` from the item's real artifacts + git — what landed, what the "
         f"anchor docs now say, what was skipped and why. Report when done; the kernel clears the "
         f"item from there."
@@ -742,7 +742,7 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
         "hesitation.\n\n"
 
         "### Your verdict\n"
-        "End by calling the `deputy_verdict` tool, once. After the call, say nothing beyond one "
+        "End by calling the `submit_gate_verdict` tool, once. After the call, say nothing beyond one "
         "short closing line."
     )
 
