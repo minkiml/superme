@@ -194,12 +194,6 @@ report.
 - Plain, concise, easy language. Fewer words wins. No verbosity.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Omit a prose field rather than filling it with "none" — an absent block reads better.
-
-## Chat response style
-- Plain, concise, easy language. Fewer words wins. No verbosity.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
-- Do not use more than 30 words.
 ## Reporting the run
 
 `report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase,

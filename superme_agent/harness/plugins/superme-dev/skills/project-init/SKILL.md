@@ -114,11 +114,6 @@ tool's result:
 If nothing was launched, hand off plainly: memory is established, Orient is valid, the board renders,
 and work begins from an inbox item whenever the owner is ready.
 
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
-
 ## Pitfalls
 - Launching before Step 6's approval, or without the owner's explicit launch confirm — docs first, and
   the cohort is opt-in.

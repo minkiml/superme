@@ -39,8 +39,8 @@ Never file an item to RECORD something — a decision, a ruling, a fact you want
 work. A ruling worth keeping is already a `Rule` in the project's decisions; one that is not is
 spent, and neither belongs on the board.
 
-Then check each filed-able proposal against what already exists — `read_dev_log`, the roadmap, open
-inbox items. A proposal that duplicates live work is **not filed** either. Name the item it
+Then check each filed-able proposal against what already exists — `read_inbox` for open items,
+`read_dev_log` for work already run, and the roadmap. A proposal that duplicates live work is **not filed** either. Name the item it
 duplicates in step 3; a second ticket for work already on the board is noise the owner has to clean
 up.
 
@@ -87,8 +87,8 @@ carried either has thrown away the decision the child item runs on.
 - **Carry the proposal's own typing into `work_kind`.** `## Proposed work` types each entry —
   `implementation` where the deliverable is changed code, `research` where it is an answer or a
   decision. Pass that verbatim; never re-decide it, and never leave it unset on a typed proposal.
-- **`spawn` is the only legal relation here.** Never `itemize_and_launch` — that is onboarding's
-  direct-mint path, and from here it would start building a conclusion nobody approved.
+- **`spawn` is the only legal relation here.** A relation that mints and starts an item belongs to
+  onboarding; from here it would start building a conclusion nobody approved.
 - **More than a handful is itself a finding.** If the report proposed eight things, file them and
   say so in step 3: a research item that fans out that wide usually needed consolidating, and the
   owner should see that in one line rather than in eight tickets.
@@ -105,11 +105,6 @@ questions: `2 of 5 not filed — awaiting your ruling on <question>, <question>`
 
 A proposal you did not file for any other reason is recorded here too, with why. Then say what was
 filed and stop.
-
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Reporting the run
 

@@ -122,11 +122,6 @@ State what is now **in motion**, **when the owner is next needed**, and the **on
 established, Orient is valid, the board renders, and work begins from an inbox item when the owner is
 ready.
 
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
-
 ## Pitfalls
 - Serial reading — comprehend with parallel subagents scoped per subsystem, not one linear crawl.
 - Recording history in the roadmap — it is forward-only; the past lives in the code and git.

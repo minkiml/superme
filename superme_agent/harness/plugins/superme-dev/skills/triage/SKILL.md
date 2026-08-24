@@ -140,12 +140,6 @@ is the OWNER's — they accept or re-shape what you decided; the kernel and the 
 - Use bullets and numbered lists to organize information if there is more than one point.
 - Delete a block you have nothing real for — an absent section reads better than "none".
 
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
-- Do not use more than 30 words.
-
 ## Reporting the run
 
 `report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase.
