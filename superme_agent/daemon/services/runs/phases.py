@@ -226,7 +226,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     # works.
     live_item = _dev.read_work_item(dev_root, item_id) or {"id": item_id, "phase": phase}
     focus = kernel_speech.work_item_preamble(
-        item_id, live_item, str(item_dir), interactive=False,
+        item_id, live_item, str(item_dir), interactive=False, shell_cwd=ctx.cwd,
         compacted_checkpoint=compacted_checkpoint(ctx, live_item, session_id))
     final_tokens = final_usage = final_session = None
     run_started = time.time()

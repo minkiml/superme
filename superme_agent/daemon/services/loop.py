@@ -352,7 +352,8 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         approve=deny_all,                # background: nothing outside the boundary runs
         extra_mcp_servers={**dev_mcp(ctx, wt, ctx.cwd, item_id, scope="vet"),
                            "run": make_run_report_server(sink)},
-        system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+        system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir),
+                                                       interactive=False, shell_cwd=wt_ctx.cwd),
         item_bound=True,                 # one item is the subject — no board-wide in-progress list
         write_boundary=boundary,         # boundary Bash autonomy (running checks IS the job)
         sandbox_writes=boundary,         # …and the kernel holds that same boundary (sandbox.py)
@@ -597,7 +598,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         # Build REMEMBERS, so it is the other thread compaction can hit.
         system_append=kernel_speech.work_item_preamble(
             item_id, item, str(item_dir), interactive=False,
-            compacted_checkpoint=compacted),
+            compacted_checkpoint=compacted, shell_cwd=wt_ctx.cwd),
         item_bound=True,                 # one item is the subject — no board-wide in-progress list
         write_boundary=boundary,  # writes stay in the worktree and item dir
         sandbox_writes=boundary,         # …enforced for shell commands by the OS (sandbox.py)

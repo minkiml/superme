@@ -3900,6 +3900,10 @@
    "home": "superme_agent.core.kernel_speech",
    "sig": "def(run: dict, events: list[dict]) -> str"
   },
+  "_shell_is_in": {
+   "home": "superme_agent.core.kernel_speech",
+   "sig": "def(shell_cwd, worktree) -> bool"
+  },
   "build_first_trigger": {
    "home": "superme_agent.core.kernel_speech",
    "sig": "def(item_id: str, title: str, vet_env: bool = False) -> str"
@@ -3998,7 +4002,7 @@
   },
   "work_item_preamble": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None) -> str"
+   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None) -> str"
   },
   "write_trigger": {
    "home": "superme_agent.core.kernel_speech",
@@ -10985,7 +10989,7 @@
   },
   "work_item_preamble": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None) -> str"
+   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None) -> str"
   },
   "ws_agent": {
    "home": "superme_agent.daemon.routers.ws",

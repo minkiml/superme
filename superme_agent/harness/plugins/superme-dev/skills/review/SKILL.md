@@ -40,8 +40,13 @@ honest when they aren't.
   nothing into the code.
 
 Numbers come from their source, never an estimate: the diff shape from one
-`git diff --stat <base>...HEAD` run in the worktree — `<base>` is the branch base named in your
+`git -C <worktree> diff --stat <base>...HEAD` — the worktree path and `<base>` are both in your
 `## Current focus` block — and check results from the cycles' `## Verification`.
+
+**Name the worktree in the command; never `cd` into it.** Your shell starts in the repo root, and
+`cd` is not a read-only verb, so `cd <worktree> && git diff` is refused whole. A bare `git diff`
+runs and answers about the wrong tree, which is worse than being refused. `git -C <worktree> …`
+is the form that works.
 
 ## Step 2 — Name what the anchor docs will owe
 

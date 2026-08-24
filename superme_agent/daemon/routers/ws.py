@@ -388,7 +388,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 began_run = item_run_id is not None
                 last_bound = (ctx, work_item_id)
                 session_append = work_item_preamble(
-                    work_item_id, item, item_dir,
+                    work_item_id, item, item_dir, shell_cwd=ctx.cwd,
                     # Owed only while this thread's newest finished run is the compaction, so the
                     # very next turn carries it.
                     compacted_checkpoint=compacted_checkpoint(ctx, item, turn_resume))

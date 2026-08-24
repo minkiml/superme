@@ -337,10 +337,24 @@ def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True
     )
 
 
+def _shell_is_in(shell_cwd, worktree) -> bool:
+    """Will the turn's shell start inside `worktree`? Unknown cwd reads as no."""
+    if not shell_cwd or not worktree:
+        return False
+    try:
+        a, b = Path(shell_cwd).resolve(), Path(worktree).resolve()
+    except (OSError, ValueError):
+        return False
+    return a == b or b in a.parents
+
+
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
-                       compacted_checkpoint: str | None = None) -> str:
+                       compacted_checkpoint: str | None = None, shell_cwd=None) -> str:
     """EVERY work-item-bound turn · per-turn. A THIN contract derived from
-    (kind, phase); the procedure lives in the skill."""
+    (kind, phase); the procedure lives in the skill.
+
+    `shell_cwd` is the cwd the caller will actually run the turn in. Only build and vet run inside
+    the worktree; told otherwise, a review reaches for `cd` and is refused."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
@@ -405,11 +419,18 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     # Edit boundary: worktree during build+, item folder otherwise. Vet is read-only by
     # construction at the permission layer.
     wt = item.get("git_worktree")
+    in_wt = _shell_is_in(shell_cwd, wt)
+    # A shell that did not start in the worktree can still READ it, but only through a command
+    # that names it: `cd` is not a read-only verb, so the whole line is refused.
+    reach = ("" if in_wt else
+             f" Your shell does NOT start there — it starts in `{shell_cwd}`. Reach the worktree "
+             f"by naming it in the command (`git -C {wt} diff …`); a `cd` into it is refused.")
     if phase == "vet":
         lines.append(
             f"\n**Edit boundary (vet — read-only):** you are the VETTER, not the builder. File "
             f"writes are disabled by design; you inspect and RUN things (worktree "
-            f"`{wt}/` is your working directory — shell for tests/commands is fine). Record each "
+            f"`{wt}/`{' is your working directory' if in_wt else ' holds the code'} — shell for "
+            f"tests/commands is fine).{reach} Record each "
             f"check's outcome with `record_verification` and file the cycle's report with "
             f"`file_vet_report`. If something fails, FAIL it and describe what you observed — "
             f"never fix it, never soften it."
@@ -440,11 +461,11 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         # session carries that commit.
         base = item.get("git_base")
         lines.append(
-            f"\n**Edit boundary:** all code changes happen in this item's git worktree `{wt}/` "
-            f"(your working directory); the item folder holds its artifacts. File writes outside "
-            f"those two are denied. Never touch the main repo tree — the merge to main happens at "
-            f"the user's review gate."
-            + (f" Branch base: `{base}`." if base else "")
+            f"\n**Edit boundary:** all code changes happen in this item's git worktree `{wt}/`"
+            f"{' (your working directory)' if in_wt else ''}; the item folder holds its artifacts. "
+            f"File writes outside those two are denied. Never touch the main repo tree — the merge "
+            f"to main happens at the user's review gate."
+            + (f" Branch base: `{base}`." if base else "") + reach
         )
     else:
         # Research items never get a worktree — promising them one asserts a future their pipeline

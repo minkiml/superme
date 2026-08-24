@@ -260,12 +260,18 @@ def render_registry() -> dict[str, str]:
             "/k/dev/session-memory/sess-1.md"),
         "trigger.capture": KS.capture_trigger("SLICE"),
         "trigger.capture.steered": KS.capture_trigger("SLICE", "FOCUS"),
-        "preamble.work_item.build": KS.work_item_preamble("fix1", item, str(d)),
+        # `shell_cwd` mirrors the runner: build and vet stream with the worktree as cwd, review
+        # and close from the repo root. A fixture that omits it snapshots a prompt nobody sends.
+        "preamble.work_item.build": KS.work_item_preamble("fix1", item, str(d), shell_cwd="/wt"),
         "preamble.work_item.build.bg": KS.work_item_preamble("fix1", item, str(d),
-                                                             interactive=False),
-        "preamble.work_item.vet": KS.work_item_preamble("fix1", {**item, "phase": "vet"}, str(d)),
+                                                             interactive=False, shell_cwd="/wt"),
+        "preamble.work_item.vet": KS.work_item_preamble("fix1", {**item, "phase": "vet"}, str(d),
+                                                        shell_cwd="/wt"),
+        "preamble.work_item.review.repo_root": KS.work_item_preamble(
+            "fix1", {**item, "phase": "review"}, str(d), interactive=False, shell_cwd="/repo"),
         "preamble.work_item.compacted": KS.work_item_preamble(
-            "fix1", item, str(d), compacted_checkpoint=str(d / "checkpoints/20260101T000000.md")),
+            "fix1", item, str(d), shell_cwd="/wt",
+            compacted_checkpoint=str(d / "checkpoints/20260101T000000.md")),
         "preamble.work_item.research": KS.work_item_preamble(
             "fix1", {"phase": "plan", "kind": "research", "title": "R"}, str(d)),
         "preamble.general": KS.general_preamble(),

@@ -95,7 +95,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     trigger = kernel_speech.intake_trigger(skill, item_id, title, changed)
     prompt = trigger
     capture_prompt(context_id, trigger, item_id=item_id)
-    focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
+    focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False,
+                                             shell_cwd=ctx.cwd)
     final_tokens = None
     final_usage = None
     final_session = None
