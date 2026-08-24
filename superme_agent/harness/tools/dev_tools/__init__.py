@@ -19,7 +19,8 @@ from .inbox import (InboxArgs, _fmt_inbox, _list_inbox, CreateInboxItemArgs, _wk
                     AppendInboxItemArgs, _append_inbox_item)
 from .items import (_item_dir, _bound_err, ScaffoldArtifactArgs, _scaffold_artifact,
                     SetTriageClassificationArgs, _set_triage_classification, WriteCheckpointArgs,
-                    _write_checkpoint, SyncFromMainArgs, _sync_from_main)
+                    _write_checkpoint, SyncFromAnchorBranchArgs,
+                    _sync_from_anchor_branch)
 from .verification import (DryRunChecksArgs, _dry_run_checks, RecordValidationArgs,
                            _record_validation, RecordVerificationArgs, _record_verification,
                            RecordDiagnosisArgs, _record_diagnosis, RecordLensArgs, _record_lens,
@@ -28,9 +29,7 @@ from .verification import (DryRunChecksArgs, _dry_run_checks, RecordValidationAr
 from .records import (ReadDecisionsArgs, _read_decisions, ReadResearchProposalsArgs,
                       _read_research_proposals, RequestAuthorizationArgs, _request_authorization)
 from .reports import (FilePlanReportArgs, _file_plan_report, FilePhaseReportArgs,
-                      FileInvestigateReportArgs, _phase_report_pen, _file_triage_report,
-                      _file_build_report, _file_review_report, _file_close_report,
-                      _file_investigate_report, FileVetReportArgs, _file_vet_report)
+                      _file_phase_report, FileVetReportArgs, _file_vet_report)
 from .revisions import (KnowledgeOpArg, ApplyKnowledgeDeltaArgs, _apply_knowledge_delta,
                         PlanOpArg, PlanChangeArg, RevisePlanArgs, _revise_plan)
 from .scopes import (ITEM_DEV_TOOLS, MAIN_DEV_TOOLS, LEARNING_DEV_TOOLS, DEV_TOOLS, _BY_NAME,

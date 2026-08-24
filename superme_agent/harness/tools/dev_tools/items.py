@@ -275,13 +275,13 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
     return write_checkpoint
 
 
-class SyncFromMainArgs(TypedDict, total=False):
+class SyncFromAnchorBranchArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id (must have a live worktree — build phase)"]]
 
 
-def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None,
+def _sync_from_anchor_branch(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None,
                     spine=None, **_):
-    async def sync_from_main(args: dict) -> dict:
+    async def sync_from_anchor_branch(args: dict) -> dict:
         from pathlib import Path
         from ....core import git_layer as _gl
         from ....core.dev_knowledge import parse_md
@@ -314,4 +314,4 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
                         "conflict for the owner's Resolve-with-Agent action.")
         return _ok(f"Trunk merged into the item branch at {res['commit'][:10]}. Re-run your "
                    f"validation checks — evidence recorded before this merge is now stale.")
-    return sync_from_main
+    return sync_from_anchor_branch

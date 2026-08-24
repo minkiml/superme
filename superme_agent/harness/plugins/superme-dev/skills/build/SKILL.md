@@ -100,8 +100,8 @@ Four sections are never yours to write:
 | the cycle report's `## Verification` | vet's recording tool | a hand-written line there is evidence nobody produced |
 | the cycle report's `## Cycle outcome` | the loop driver | same |
 
-On long builds, sync with the trunk via `sync_from_main` (commit first) and resolve any conflicts it
-reports yourself.
+On long builds, sync with the trunk via `sync_from_anchor_branch` (commit first) and resolve any
+conflicts it reports yourself.
 
 ### Tag every probe, and the cleanup is one grep
 
@@ -179,7 +179,7 @@ a raw diff — name files, how to exercise the change, and every gap honestly.
 
 ### 4c — Write the user-facing report
 
-Fill `templates/report-build-template.md` and hand the whole body to `file_build_report`. It owns
+Fill `templates/report-build-template.md` and hand the whole body to `file_phase_report`. It owns
 the path, overwrites, and refuses a report with an unfilled slot left in it — never write the file
 yourself. Every line traces to the cycle reports. It always describes the work as it stands NOW, so the round history
 goes in the `**Summary:**` line and nowhere else ("Done, after three rounds — the empty-ledger case

@@ -422,7 +422,7 @@ def test_tool_registration() -> None:
        names == {"scaffold_artifact", "record_verification", "write_checkpoint",
                  "record_validation",   # build's self-check as DATA, so vet can audit the claim
                  "dry_run_checks",      # …and plan's smoke test of the `run:` blocks it just wrote
-                "sync_from_main",                            # joined later
+                "sync_from_anchor_branch",                   # joined later
                 "apply_knowledge_delta",    # joined later
                 "set_triage_classification",                 # joined in the audit batch
                 "file_vet_report",                           # joined later 
@@ -433,10 +433,8 @@ def test_tool_registration() -> None:
                 "nominate_check",       # the verification library: vet nominates, close writes
                 "read_verification_library",   # …and both plan and close read it through one tool
                 "file_plan_report",     # the plan gate's report pen: the matrix is derived
-                "file_investigate_report",   # …and investigate's, which had no pen and no path
-                # the remaining four pens of the same seven-template set
-                "file_triage_report", "file_build_report", "file_review_report",
-                "file_close_report",
+                # one pen for every whole-body phase report; the mounted scope picks the phase
+                "file_phase_report",
                 "read_research_proposals", "read_decisions"}
 
        and all(t in {x.name for x in DEV_TOOLS} for t in names))

@@ -39,18 +39,19 @@ EXPECTED: dict[str, set[str]] = {
     # Every scope that can ask the owner reads decisions first, or it asks what was already
     # settled.
     "triage": {"scaffold_artifact", "set_triage_classification", "create_inbox_item",
-               "file_triage_report", "read_decisions"},
+               "file_phase_report", "read_decisions"},
     "plan": {"scaffold_artifact", "dry_run_checks", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"},
-    "build": {"record_validation", "request_authorization", "sync_from_main", "write_checkpoint",
-              "create_inbox_item", "file_build_report"},
+    "build": {"record_validation", "request_authorization", "sync_from_anchor_branch",
+              "write_checkpoint",
+              "create_inbox_item", "file_phase_report"},
     "vet": {"record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"},
-    "review": {"scaffold_artifact", "request_authorization", "file_review_report",
+    "review": {"scaffold_artifact", "request_authorization", "file_phase_report",
                "read_decisions"},
     "close": {"apply_knowledge_delta", "read_verification_library", "create_inbox_item",
-              "file_close_report"},
-    "investigate": {"scaffold_artifact", "write_checkpoint", "file_investigate_report",
+              "file_phase_report"},
+    "investigate": {"scaffold_artifact", "write_checkpoint", "file_phase_report",
                     "read_decisions"},
     # Not here: it belongs to the chat scopes, where the owner approves each call.
     "itemize": {"read_inbox", "read_dev_log", "create_inbox_item", "read_research_proposals"},
@@ -109,7 +110,8 @@ def test_invariants() -> None:
     item_pens = {"scaffold_artifact", "set_triage_classification", "record_validation",
                  "record_verification", "record_diagnosis", "record_lens", "file_plan_report",
                  "file_vet_report", "revise_plan", "apply_knowledge_delta", "write_checkpoint",
-                 "sync_from_main", "request_authorization", "dry_run_checks", "nominate_check"}
+                 "sync_from_anchor_branch", "request_authorization", "dry_run_checks",
+                 "nominate_check"}
     for scope in ("general", "onboarding", "diagnosis"):
         ok(f"{scope} holds no item pen", not (names(scope) & item_pens),
            str(names(scope) & item_pens))

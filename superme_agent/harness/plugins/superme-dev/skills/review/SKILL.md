@@ -161,7 +161,7 @@ Owner ruling: "delete the old exporter, don't leave a stub"
 
 ## Step 4 — Write the user-facing report
 
-Fill `templates/report-review-template.md` and hand the whole body to `file_review_report`. It owns
+Fill `templates/report-review-template.md` and hand the whole body to `file_phase_report`. It owns
 the path and refuses a report with an unfilled slot left in it — never write the file yourself. ONE
 template for every kind: an implementation item, a research item and whatever kind comes later all answer the
 same four questions.

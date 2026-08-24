@@ -54,7 +54,7 @@ an entry added to look productive taxes every later plan that reads it.
 
 ## Step 3 — Write the user-facing report
 
-Fill `templates/report-close-template.md` and hand the whole body to `file_close_report`. It owns
+Fill `templates/report-close-template.md` and hand the whole body to `file_phase_report`. It owns
 the path and refuses a report with an unfilled slot left in it — never write the file yourself. This
 is the last thing the owner reads about this item, and what they will find if they come back to it in
 six months.

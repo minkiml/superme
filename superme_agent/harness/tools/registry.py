@@ -1,8 +1,8 @@
 """Light MCP-tool registry — the mechanism behind SuperMe's in-process tools.
 
-A `ToolSpec` declares one tool: a LEAN one-line `description`, a TypedDict `schema` whose
-`Annotated` fields carry the per-param docs, and a `build` factory binding the handler to its
-deps.
+A `ToolSpec` declares one tool: its `description`, a TypedDict `schema` whose `Annotated` fields
+document each parameter, optional whole-argument `examples`, and a `build` factory binding the
+handler to its deps.
 """
 
 from __future__ import annotations
@@ -79,17 +79,31 @@ def _render_schema(schema: type | dict[str, Any]) -> dict[str, Any]:
             required.add(key)
     if required:
         out["required"] = sorted(required)
+    # Closed by default: without this an agent may invent a parameter and the call still validates.
+    out["additionalProperties"] = False
+    return out
+
+
+def spec_schema(spec: "ToolSpec") -> dict[str, Any]:
+    """One spec's schema exactly as the wire will carry it, examples included."""
+    out = dict(_render_schema(spec.schema))
+    if spec.examples:
+        out["examples"] = [dict(e) for e in spec.examples]
     return out
 
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """One tool's full declaration: lean description + typed schema + a deps-bound handler factory."""
+    """One tool: description, typed schema, and a deps-bound handler factory.
+
+    An agent routes on the `description`, so it names what the tool achieves, when to use it, and
+    what it will NOT do."""
 
     name: str
-    description: str                       # lean one-liner (no WHEN/HOW — that's the skill's job)
+    description: str                       # what it achieves · when to use it · what it won't do
     schema: type | dict[str, Any]          # a TypedDict (Annotated docs) or a full JSON-Schema dict
     build: Callable[..., Handler]          # (**deps) -> async handler
+    examples: tuple[dict[str, Any], ...] = ()   # whole valid argument sets, for a shape prose can't fix
 
 
 def describe_specs(specs: list[ToolSpec]) -> str:
@@ -98,7 +112,7 @@ def describe_specs(specs: list[ToolSpec]) -> str:
     This is PROMPT TEXT, riding in every request, so a bloated description is visible as a cost."""
     blocks: list[str] = []
     for s in specs:
-        schema = _render_schema(s.schema)
+        schema = spec_schema(s)
         props: dict = schema.get("properties") or {}
         required = set(schema.get("required") or [])
         lines = [s.name, f"    {s.description}"]
@@ -108,6 +122,8 @@ def describe_specs(specs: list[ToolSpec]) -> str:
             doc = prop.get("description") or ""
             opt = "" if key in required else ", optional"
             lines.append(f"    · {key} ({kind}{opt})" + (f" — {doc}" if doc else ""))
+        for example in schema.get("examples") or []:
+            lines.append(f"    example: {example}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -116,6 +132,6 @@ def build_mcp_server(name: str, specs: list[ToolSpec], *, version: str = "1.0.0"
     """Render `specs` into an SDK MCP server, binding each handler to the shared `deps`.
 
     Unknown deps are ignored by the factories, so callers can pass a superset."""
-    tools = [tool(s.name, s.description, _render_schema(s.schema))(s.build(**deps))
+    tools = [tool(s.name, s.description, spec_schema(s))(s.build(**deps))
              for s in specs]
     return create_sdk_mcp_server(name=name, version=version, tools=tools)

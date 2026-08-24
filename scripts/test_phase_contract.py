@@ -11,7 +11,7 @@ from pathlib import Path
 
 from superme_agent.harness.policy import is_safe
 from superme_agent.harness.tools.dev_tools import DEV_TOOLS, TOOL_SCOPES
-from scripts.sources import src
+from superme_agent.harness.tools.dev_tools.reports import _WHOLE_BODY_PHASES as WHOLE_BODY_PHASES
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "superme_agent/harness/plugins/superme-dev/skills"
@@ -26,6 +26,9 @@ REPORTED = ("triage", "plan", "build", "vet", "review", "close", "investigate")
 # Scopes mounted on a run with NOBODY TO ASK. The chat scopes are excluded: a human approves each
 # call there.
 BACKGROUND_SCOPES = (*PHASES, "itemize", "deputy", "handoff", "resolve")
+
+# A report pen, by name: the shared `file_phase_report` or a phase's own.
+PEN = re.compile(r"file_\w*_?report")
 
 # Phases whose report is written from a path named in prose. EMPTY, and the ratchet is the value.
 NO_PEN_YET: set[str] = set()
@@ -79,28 +82,33 @@ def test_a_background_scope_mounts_nothing_it_cannot_use():
 
 
 def test_every_report_the_reader_asks_for_has_a_writer():
-    """The reader looks in exactly one place. Whoever writes the report has to agree with it, and
-    the only way to guarantee that is for code to build the path."""
-    dev_tools_src = src("superme_agent/harness/tools/dev_tools.py")
-    penned, prose = set(), set()
+    """The reader looks in one place, so code must build the path.
+
+    A phase has its own pen, or the shared one, which takes the phase from its scope."""
+    penned, prose = {}, set()
     for phase in REPORTED:
-        if f"file_{phase}_report" in dev_tools_src:
-            penned.add(phase)
+        pens = sorted(t for t in TOOL_SCOPES.get(phase, ()) if PEN.fullmatch(t))
+        if len(pens) == 1:
+            penned[phase] = pens[0]
         if f"reports/report-{phase}.md" in skill_text(phase):
             prose.add(phase)
 
-    ok(f"the phases with a pen own their path in code — {sorted(penned)}",
-       penned == set(REPORTED) - NO_PEN_YET)
+    ok(f"each reported phase mounts exactly one report pen — {sorted(penned)}",
+       set(penned) == set(REPORTED) - NO_PEN_YET)
+    # The shared pen must be able to serve every phase that mounts it, or the call refuses.
+    shared = sorted(p for p, pen in penned.items() if pen == "file_phase_report")
+    ok(f"…and the shared pen recognises every phase mounting it — {shared}",
+       all(p in WHOLE_BODY_PHASES for p in shared))
     # A skill may name what the pen produces; what matters is that it routes the agent THROUGH the
     # pen.
-    unrouted = sorted(p for p in penned if f"file_{p}_report" not in skill_text(p))
+    unrouted = sorted(p for p, pen in penned.items() if pen not in skill_text(p))
     ok(f"…and each one's skill names the pen, so the write never goes through prose — "
        f"missing {unrouted}", not unrouted)
     # The ratchet. Never assert the gap is fine; assert it is not growing.
-    penless = set(REPORTED) - penned
+    penless = set(REPORTED) - set(penned)
     ok(f"the pen-less list has not grown — {sorted(penless)}", penless <= NO_PEN_YET)
     ok("…and every reported phase is accounted for, penned or listed",
-       penned | NO_PEN_YET == set(REPORTED))
+       set(penned) | NO_PEN_YET == set(REPORTED))
     ok(f"…and each pen-less phase still names its path, so the report is at least attempted — "
        f"{sorted(penless & prose)}", penless <= prose)
 

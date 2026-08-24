@@ -14988,11 +14988,6 @@
    "methods": [],
    "sig": "class"
   },
-  "FileInvestigateReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "methods": [],
-   "sig": "class"
-  },
   "FilePhaseReportArgs": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
@@ -15142,7 +15137,7 @@
    "methods": [],
    "sig": "class"
   },
-  "SyncFromMainArgs": {
+  "SyncFromAnchorBranchArgs": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
@@ -15212,31 +15207,15 @@
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(meta: dict | None) -> str"
   },
-  "_file_build_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
   "_file_candidate": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, origin_session_id=None, capture_source='agent', **_)"
   },
-  "_file_close_report": {
+  "_file_phase_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_investigate_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, scope=None, **_)"
   },
   "_file_plan_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_review_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_triage_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
@@ -15295,10 +15274,6 @@
   "_ok": {
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
-  },
-  "_phase_report_pen": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(phase: str)"
   },
   "_propose_memory": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
@@ -15376,7 +15351,7 @@
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, proposal_id=None, staged_path=None, **_)"
   },
-  "_sync_from_main": {
+  "_sync_from_anchor_branch": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
   },
@@ -15491,7 +15466,7 @@
    "methods": [],
    "sig": "class"
   },
-  "SyncFromMainArgs": {
+  "SyncFromAnchorBranchArgs": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
@@ -15529,7 +15504,7 @@
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
-  "_sync_from_main": {
+  "_sync_from_anchor_branch": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
   },
@@ -15772,11 +15747,6 @@
   }
  },
  "superme_agent.harness.tools.dev_tools.reports": {
-  "FileInvestigateReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "methods": [],
-   "sig": "class"
-  },
   "FilePhaseReportArgs": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
@@ -15792,6 +15762,9 @@
    "methods": [],
    "sig": "class"
   },
+  "_WHOLE_BODY_PHASES": {
+   "sig": "value:tuple"
+  },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(item_id, bound_item_id) -> str | None"
@@ -15800,27 +15773,11 @@
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
   },
-  "_file_build_report": {
+  "_file_phase_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_close_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_investigate_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, scope=None, **_)"
   },
   "_file_plan_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_review_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_triage_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
@@ -15835,10 +15792,6 @@
   "_ok": {
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
-  },
-  "_phase_report_pen": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(phase: str)"
   },
   "_s": {
    "home": "superme_agent.harness.tools.dev_tools.render",
@@ -15936,11 +15889,6 @@
   },
   "FileCandidateArgs": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
-   "methods": [],
-   "sig": "class"
-  },
-  "FileInvestigateReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
    "sig": "class"
   },
@@ -16073,7 +16021,7 @@
    "methods": [],
    "sig": "class"
   },
-  "SyncFromMainArgs": {
+  "SyncFromAnchorBranchArgs": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
@@ -16118,31 +16066,15 @@
    "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
-  "_file_build_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
   "_file_candidate": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, origin_session_id=None, capture_source='agent', **_)"
   },
-  "_file_close_report": {
+  "_file_phase_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_investigate_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, scope=None, **_)"
   },
   "_file_plan_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_review_report": {
-   "home": "superme_agent.harness.tools.dev_tools.reports",
-   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
-  },
-  "_file_triage_report": {
    "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
@@ -16243,7 +16175,7 @@
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, proposal_id=None, staged_path=None, **_)"
   },
-  "_sync_from_main": {
+  "_sync_from_anchor_branch": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
   },
@@ -16373,6 +16305,10 @@
   "describe_specs": {
    "home": "superme_agent.harness.tools.registry",
    "sig": "def(specs: 'list[ToolSpec]') -> 'str'"
+  },
+  "spec_schema": {
+   "home": "superme_agent.harness.tools.registry",
+   "sig": "def(spec: \"'ToolSpec'\") -> 'dict[str, Any]'"
   }
  },
  "superme_agent.harness.tools.run_tools": {

@@ -9,9 +9,9 @@ from .learning import (DevLogArgs, DropCandidatesArgs, FileCandidateArgs, MergeP
 from .inbox import (AppendInboxItemArgs, CreateInboxItemArgs, InboxArgs, ItemizeAndLaunchArgs,
                     PushInboxItemArgs, _append_inbox_item, _create_inbox_item,
                     _itemize_and_launch, _list_inbox, _push_inbox_item)
-from .items import (ScaffoldArtifactArgs, SetTriageClassificationArgs, SyncFromMainArgs,
-                    WriteCheckpointArgs, _scaffold_artifact, _set_triage_classification,
-                    _sync_from_main, _write_checkpoint)
+from .items import (ScaffoldArtifactArgs, SetTriageClassificationArgs,
+                    SyncFromAnchorBranchArgs, WriteCheckpointArgs, _scaffold_artifact,
+                    _set_triage_classification, _sync_from_anchor_branch, _write_checkpoint)
 from .verification import (DryRunChecksArgs, NominateCheckArgs, ReadVerificationLibraryArgs,
                            RecordDiagnosisArgs, RecordLensArgs, RecordValidationArgs,
                            RecordVerificationArgs, _dry_run_checks, _nominate_check,
@@ -19,10 +19,8 @@ from .verification import (DryRunChecksArgs, NominateCheckArgs, ReadVerification
                            _record_validation, _record_verification)
 from .records import (ReadDecisionsArgs, ReadResearchProposalsArgs, RequestAuthorizationArgs,
                       _read_decisions, _read_research_proposals, _request_authorization)
-from .reports import (FileInvestigateReportArgs, FilePhaseReportArgs, FilePlanReportArgs,
-                      FileVetReportArgs, _file_build_report, _file_close_report,
-                      _file_investigate_report, _file_plan_report, _file_review_report,
-                      _file_triage_report, _file_vet_report)
+from .reports import (FilePhaseReportArgs, FilePlanReportArgs, FileVetReportArgs,
+                      _file_phase_report, _file_plan_report, _file_vet_report)
 from .revisions import (ApplyKnowledgeDeltaArgs, RevisePlanArgs, _apply_knowledge_delta,
                         _revise_plan)
 
@@ -125,41 +123,13 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
         FilePlanReportArgs, _file_plan_report,
     ),
     ToolSpec(
-        "file_investigate_report",
-        "File the investigation's user report (investigate phase, once the record is complete). "
-        "You supply the whole body, filled from its template; the tool owns the path and refuses "
-        "a report with an unfilled slot left in it.",
-        FileInvestigateReportArgs, _file_investigate_report,
-    ),
-    # One pen, one contract: hand over the whole filled body; the tool owns the path and refuses
-    # an unfilled slot.
-    ToolSpec(
-        "file_triage_report",
-        "File triage's user report (triage phase, once the classification is settled). You supply "
-        "the whole body, filled from its template; the tool owns the path and refuses a report "
-        "with an unfilled slot left in it.",
-        FilePhaseReportArgs, _file_triage_report,
-    ),
-    ToolSpec(
-        "file_build_report",
-        "File the build cycle's user report (build phase, at the end of a cycle). You supply the "
-        "whole body, filled from its template; the tool owns the path and refuses a report with "
-        "an unfilled slot left in it.",
-        FilePhaseReportArgs, _file_build_report,
-    ),
-    ToolSpec(
-        "file_review_report",
-        "File the review's user report (review phase, once the verdict is drawn). You supply the "
-        "whole body, filled from its template; the tool owns the path and refuses a report with "
-        "an unfilled slot left in it.",
-        FilePhaseReportArgs, _file_review_report,
-    ),
-    ToolSpec(
-        "file_close_report",
-        "File the close-out's user report (close phase, once the knowledge delta is applied). You "
-        "supply the whole body, filled from its template; the tool owns the path and refuses a "
-        "report with an unfilled slot left in it.",
-        FilePhaseReportArgs, _file_close_report,
+        "file_phase_report",
+        "File this phase's user-facing report — the document the owner reads at its gate. Hand "
+        "over the whole body, filled from this phase's template with every `<fill:…>` slot "
+        "replaced. It is written verbatim, and refused if a slot is left unfilled. It writes this "
+        "phase's report and no other, derives nothing, appends nothing, and a second call "
+        "overwrites the first.",
+        FilePhaseReportArgs, _file_phase_report,
     ),
     ToolSpec(
         "file_vet_report",
@@ -175,10 +145,12 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
         WriteCheckpointArgs, _write_checkpoint,
     ),
     ToolSpec(
-        "sync_from_main",
-        "Freshness merge for a work-item's git worktree: merge the trunk INTO the item branch "
-        "(run during long builds and before delivering; requires a clean tree — commit first).",
-        SyncFromMainArgs, _sync_from_main,
+        "sync_from_anchor_branch",
+        "Merge the repo's anchor branch into this work-item's branch, so the build is working "
+        "against current trunk code. Run it partway through a long build and again before "
+        "delivering; it needs a clean tree, so commit first. It never pushes, never merges the "
+        "item back, and on a conflict it aborts and leaves the tree untouched.",
+        SyncFromAnchorBranchArgs, _sync_from_anchor_branch,
     ),
     ToolSpec(
         "apply_knowledge_delta",
@@ -315,19 +287,20 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     "diagnosis": ("read_dev_log", "read_run"),          # strictly read-only, by design
     # --- the item phases: scope name == the skill the run fires ---
     "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item",
-               "read_decisions", "file_triage_report"),
+               "read_decisions", "file_phase_report"),
     "plan": ("scaffold_artifact", "dry_run_checks", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"),
-    "build": ("record_validation", "request_authorization", "sync_from_main", "write_checkpoint",
-              "create_inbox_item", "file_build_report"),
+    "build": ("record_validation", "request_authorization", "sync_from_anchor_branch",
+              "write_checkpoint",
+              "create_inbox_item", "file_phase_report"),
     "vet": ("record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"),
     "review": ("scaffold_artifact", "request_authorization", "read_decisions",
-               "file_review_report"),
+               "file_phase_report"),
     "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item",
-              "file_close_report"),
+              "file_phase_report"),
     "investigate": ("scaffold_artifact", "write_checkpoint", "read_decisions",
-                    "file_investigate_report"),
+                    "file_phase_report"),
     # `itemize_and_launch` belongs to the chat scopes, where the owner approves each call; this
     # run has nobody to ask.
     "itemize": ("read_inbox", "read_dev_log", "read_research_proposals", "create_inbox_item"),
@@ -353,7 +326,7 @@ def make_dev_mcp_server(store, context_id: str, *, scope: str, **deps):
 
     Unknown scopes raise. Optional deps thread per-turn state to specific tools."""
     return build_mcp_server("dev", dev_tool_specs(scope),
-                            store=store, context_id=context_id, **deps)
+                            store=store, context_id=context_id, scope=scope, **deps)
 
 
 def dev_tool_specs(scope: str) -> list[ToolSpec]:

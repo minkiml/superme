@@ -53,14 +53,10 @@ SAFE_TOOLS = {
     # Report pens. One factory, one contract: the path is code's, and an unfilled slot is refused.
     "mcp__dev__file_vet_report",
     "mcp__dev__file_plan_report",
-    "mcp__dev__file_investigate_report",
-    "mcp__dev__file_triage_report",
-    "mcp__dev__file_build_report",
-    "mcp__dev__file_review_report",
-    "mcp__dev__file_close_report",
+    "mcp__dev__file_phase_report",
     "mcp__dev__write_checkpoint",
     # Merges trunk INTO the item's own worktree only; conflicts abort and report.
-    "mcp__dev__sync_from_main",
+    "mcp__dev__sync_from_anchor_branch",
     # Stages edit ops item-local, applied later and atomically with the owner's merge.
     "mcp__dev__apply_knowledge_delta",
     # Writes only the item's own plan.md, through validated ops — the re-plan's only way to change

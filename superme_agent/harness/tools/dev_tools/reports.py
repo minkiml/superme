@@ -66,52 +66,20 @@ class FilePhaseReportArgs(TypedDict, total=False):
                                    "Passed verbatim; nothing is derived and nothing is appended")]]
 
 
-FileInvestigateReportArgs = FilePhaseReportArgs
+# Phases whose report is one whole body, handed over as written. plan and vet derive part of
+# theirs.
+_WHOLE_BODY_PHASES = ("triage", "build", "review", "close", "investigate")
 
 
-def _phase_report_pen(phase: str):
-    """Build the pen for one phase's user-facing report.
+def _file_phase_report(*, store, context_id, dev_root=None, bound_item_id=None, scope=None, **_):
+    """The pen for whichever phase's report this session is entitled to write.
 
-    One factory, and the path is never named to an agent: a phase naming its own resolves it against
-    its cwd."""
-    def factory(*, store, context_id, dev_root=None, bound_item_id=None, **_):
-        async def file_phase_report(args: dict) -> dict:
-            from ....core import artifacts as _arts
-            item_id = _s(args, "item_id")
-            if (msg := _bound_err(item_id, bound_item_id)):
-                return _err(msg)
-            d = _item_dir(dev_root, item_id)
-            if d is None:
-                return _err(f"No work-item {item_id!r} here.")
-            body = _s(args, "body") or ""
-            if not body.strip():
-                return _err("body is empty — the report is the deliverable, not a formality.")
-            stem = f"report-{phase}"
-            path = d / "reports" / f"{stem}.md"
-            try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
-            except OSError as e:
-                return _err(str(e))
-            if issues := _arts.report_issues(d, stem):
-                return _err(f"{path} written, but it is not finished: {'; '.join(issues)}")
-            return _ok(f"{path} written.")
-        file_phase_report.__name__ = f"file_{phase}_report"
-        return file_phase_report
-    return factory
-
-
-_file_triage_report = _phase_report_pen("triage")
-_file_build_report = _phase_report_pen("build")
-_file_review_report = _phase_report_pen("review")
-_file_close_report = _phase_report_pen("close")
-
-
-def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
-    async def file_investigate_report(args: dict) -> dict:
-        """The investigation's user report. The path is built in code, and an unfilled slot is refused
-        rather than shipped."""
+    The phase comes from the mounted scope, never the agent, which could name another's."""
+    async def file_phase_report(args: dict) -> dict:
         from ....core import artifacts as _arts
+        phase = str(scope or "")
+        if phase not in _WHOLE_BODY_PHASES:
+            return _err(f"This session ({phase or 'no phase'}) has no whole-body report to file.")
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
@@ -121,16 +89,17 @@ def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=
         body = _s(args, "body") or ""
         if not body.strip():
             return _err("body is empty — the report is the deliverable, not a formality.")
-        path = d / "reports" / "report-investigate.md"
+        stem = f"report-{phase}"
+        path = d / "reports" / f"{stem}.md"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
         except OSError as e:
             return _err(str(e))
-        if issues := _arts.report_issues(d, "report-investigate"):
+        if issues := _arts.report_issues(d, stem):
             return _err(f"{path} written, but it is not finished: {'; '.join(issues)}")
         return _ok(f"{path} written.")
-    return file_investigate_report
+    return file_phase_report
 
 
 class FileVetReportArgs(TypedDict, total=False):
