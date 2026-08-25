@@ -41,6 +41,15 @@ them silently stops being updated.
 vet nominates a check only after it has actually passed, close writes it in, and only the owner
 promotes one to standing. A fresh repo's is empty and that is correct; onboarding does not author it.
 
+**A decision is not a constitution.** Both hold a standing rule. The test:
+
+- A turn must FOLLOW it → a **constitution**, in the repo's harness cell, not under this root.
+  Rewritten whenever the rule changes.
+- A turn only needs to KNOW it was settled → a **`D-NNN` entry** in `decisions.md`. Never edited.
+
+Both → write the entry, then a constitution citing it. Never the same words in both: an append-only
+ledger cannot be corrected when the rule moves.
+
 **The tense rule:** `capabilities.md` is present tense only — what works today. `roadmap.md` is future
 tense. A capability that hasn't shipped belongs in the roadmap; the moment the two mix, neither can be
 trusted. (`spec.md` was retired into `architecture.md` — stack and constraints ARE current-state

@@ -98,12 +98,12 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
                 groups: [{ cards: consts.map((c) => constitutionCard(c, contextId, load, setOpenConst)) }],
               },
               {
-                key: 'expertise',
-                name: 'Expertise',
-                note: 'Adopted for this repo from the shared pool',
+                key: 'practice',
+                name: 'Practice',
+                note: 'Portable craft, adopted for this repo',
                 tint: 'universal',
                 icon: Package,
-                empty: 'No expertise adopted for this repo yet.',
+                empty: 'Nothing adopted for this repo yet.',
                 action: <AddAsset assets={assets} contextId={contextId} onAdded={load} onView={setOpenAsset} />,
                 groups: [{ cards: assets.filter((a) => a.adopted && onOffer(a)).map((a) => assetCard(a, contextId, load, setOpenAsset)) }],
               },
@@ -299,15 +299,15 @@ function AddAsset({ assets, contextId, onAdded, onView }: { assets: AssetItem[];
   }
   return (
     <>
-      <button onClick={() => setOpen(true)} className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:text-fg" title="Add pooled assets">
+      <button onClick={() => setOpen(true)} className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:text-fg" title="Adopt from the shared pool">
         <Plus className="h-3 w-3" /> Add
       </button>
       {open && (
-        <Modal onClose={close} title="Add expertise" maxW="max-w-lg" column>
+        <Modal onClose={close} title="Add practice" maxW="max-w-lg" column>
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3">
             {pool.length === 0 && (
               <div className="px-4 py-10 text-center text-[12px] text-muted">
-                All pooled expertise is already adopted or no list is available for this project.
+                Everything on offer is already adopted, or this project has no pool.
               </div>
             )}
             {pool.map((a) => {
