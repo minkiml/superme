@@ -143,6 +143,8 @@ def test_wiring():
     ok("…and from the picker, which offers only what this project may take",
        "assets.filter(onOffer)" in fe)
     ok("…and counts what is available against what is adopted", "available ·" in fe)
+    ok("an asset renders its body on click, and from the picker without adopting it",
+       "AssetModal" in fe and "onView(a)" in fe)
     router = src("superme_agent/daemon/routers/dev/harness.py")
     ok("the API refuses to adopt what is not on offer", "is not on offer to this project" in router)
     ok("the publish stamp writes no dead field",

@@ -39,6 +39,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
   const [err, setErr] = useState<string | null>(null)
   const [openConst, setOpenConst] = useState<ManagedConstitution | null>(null)
   const [openPlugin, setOpenPlugin] = useState<HarnessEntry | null>(null)
+  const [openAsset, setOpenAsset] = useState<AssetItem | null>(null)
   const [library, setLibrary] = useState<LibraryEntry[] | null>(null)
   const [decisions, setDecisions] = useState<DecisionEntry[] | null>(null)
 
@@ -103,8 +104,8 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
                 tint: 'universal',
                 icon: Package,
                 empty: 'No expertise adopted for this repo yet.',
-                action: <AddAsset assets={assets} contextId={contextId} onAdded={load} />,
-                groups: [{ cards: assets.filter((a) => a.adopted && onOffer(a)).map((a) => assetCard(a, contextId, load)) }],
+                action: <AddAsset assets={assets} contextId={contextId} onAdded={load} onView={setOpenAsset} />,
+                groups: [{ cards: assets.filter((a) => a.adopted && onOffer(a)).map((a) => assetCard(a, contextId, load, setOpenAsset)) }],
               },
             ]}
           />
@@ -183,6 +184,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
         />
       )}
       {openPlugin && <LocalFileModal contextId={contextId} entry={openPlugin} onClose={() => setOpenPlugin(null)} />}
+      {openAsset && <AssetModal asset={openAsset} onClose={() => setOpenAsset(null)} />}
     </>
   )
 }
@@ -217,11 +219,13 @@ function onOffer(a: AssetItem): boolean {
 }
 
 // An adopted pool asset. Disabling keeps it adopted; Drop un-adopts it and returns it to the picker.
-function assetCard(a: AssetItem, contextId: string, reload: () => void): ScopeCard {
+function assetCard(a: AssetItem, contextId: string, reload: () => void,
+                   open: (a: AssetItem) => void): ScopeCard {
   const act = (action: AssetAction) => { assetAction(a.slug, action, contextId).then(reload).catch(() => {}) }
   return {
     key: a.slug,
     name: a.slug,
+    onClick: () => open(a),
     trailing: (
       <span className="flex items-center gap-1.5">
         <button
@@ -242,6 +246,25 @@ function assetCard(a: AssetItem, contextId: string, reload: () => void): ScopeCa
   }
 }
 
+// The preview for one shelf item. Read-only: the shelf is shared, so an edit here would rewrite it
+// for every project that adopted it.
+function AssetModal({ asset, onClose }: { asset: AssetItem; onClose: () => void }) {
+  return (
+    <Modal onClose={onClose} column maxW="max-w-3xl" z="z-[60]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
+        <Package size={15} className="text-muted" />
+        <span className="font-mono text-sm font-semibold text-fg">{asset.slug}</span>
+        <span className="rounded bg-universal/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-universal">shared</span>
+        <button onClick={onClose} className="ml-auto rounded p-1 text-muted hover:bg-hover hover:text-fg"><X size={16} /></button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {asset.description && <p className="mb-3 text-[12px] italic leading-relaxed text-faint">{asset.description}</p>}
+        <Markdown text={asset.body} variant="doc" />
+      </div>
+    </Modal>
+  )
+}
+
 function SectionLabel({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="mb-2 flex items-baseline gap-2">
@@ -253,7 +276,7 @@ function SectionLabel({ title, hint }: { title: string; hint: string }) {
 
 // The + Add popup — batch-adopt un-adopted assets from the shared pool into this repo (enabled).
 // A modal so it scales to a long pool: multi-select, then Add (N) or Cancel.
-function AddAsset({ assets, contextId, onAdded }: { assets: AssetItem[]; contextId: string; onAdded: () => void }) {
+function AddAsset({ assets, contextId, onAdded, onView }: { assets: AssetItem[]; contextId: string; onAdded: () => void; onView: (a: AssetItem) => void }) {
   const [open, setOpen] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -290,12 +313,16 @@ function AddAsset({ assets, contextId, onAdded }: { assets: AssetItem[]; context
             {pool.map((a) => {
               const on = sel.has(a.slug)
               return (
-                <button key={a.slug} onClick={() => toggle(a.slug)} title={a.description || undefined} className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${on ? 'border-dev bg-hover' : 'border-line bg-surface hover:bg-hover'}`}>
-                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-dev bg-dev text-white' : 'border-line'}`}>
-                    {on && <Check className="h-3 w-3" />}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-fg">{a.slug}</span>
-                </button>
+                <div key={a.slug} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 ${on ? 'border-dev bg-hover' : 'border-line bg-surface hover:bg-hover'}`}>
+                  {/* Selecting and reading are separate acts, so the row does not do both. */}
+                  <button onClick={() => toggle(a.slug)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-dev bg-dev text-white' : 'border-line'}`}>
+                      {on && <Check className="h-3 w-3" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-fg">{a.slug}</span>
+                  </button>
+                  <button onClick={() => onView(a)} className="shrink-0 rounded-md border border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-fg">View</button>
+                </div>
               )
             })}
           </div>
