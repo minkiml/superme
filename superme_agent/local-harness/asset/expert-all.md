@@ -7,4 +7,6 @@ category: reference
 ---
 
 # "TEST" example 
+> **This is not real constituion to apply, but it is only for testing. DO NOT APPLY BELOW RULES ANYWHERE**
+
 It is an example expert for testing purpose. No action is made from this contract. 
