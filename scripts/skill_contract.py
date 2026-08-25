@@ -11,10 +11,14 @@ import sys
 from pathlib import Path
 
 import superme_agent.core  # noqa: F401   the package must be warm; dev_tools imports back in
+from superme_agent.core.operational import parse_frontmatter
 from superme_agent.harness.tools.dev_tools.scopes import TOOL_SCOPES
-from superme_agent.paths import PLUGINS_DIR, SELF_FILE
+from superme_agent.harness.forge_kit.eval import SKILL_PRINCIPLES
+from superme_agent.paths import ASSET_DIR, PLUGINS_DIR, SELF_FILE
 
 MAX_DESC = 1024
+# The judge reads from a throwaway cwd, so the shelf item cannot be the standard's only home.
+STANDARD_ASSET = ASSET_DIR / "authoring" / "skill-authoring.md"
 
 # Which scopes each skill runs under. Nothing else compares a skill's tools to its mount.
 SKILL_SCOPES: dict[str, tuple[str, ...]] = {
@@ -54,6 +58,11 @@ PASSED = 0
 
 def fail(skill: str, rule: str, detail: str = "") -> None:
     FAILED.append(f"{skill}: {rule}" + (f" — {detail}" if detail else ""))
+
+
+def standard_body() -> str:
+    """The shelf item minus its frontmatter, which is shelf state rather than the standard."""
+    return parse_frontmatter(STANDARD_ASSET.read_text(encoding="utf-8"))[1].lstrip("\n")
 
 
 def frontmatter(text: str) -> dict[str, str]:
@@ -134,8 +143,16 @@ def check_tools(skill: str, body: str) -> list[tuple[str, str]]:
 
 def main() -> None:
     global PASSED
+    if "--sync" in sys.argv:
+        SKILL_PRINCIPLES.write_text(standard_body(), encoding="utf-8")
+        print(f"✓ {SKILL_PRINCIPLES.name} rewritten from {STANDARD_ASSET.name}")
+        return
     repo = Path(__file__).resolve().parent.parent
     assert SELF_FILE.is_file(), "SELF.md is the voice rule's home and must exist"
+    # Two tracked copies of one rule, so the check runs on every machine.
+    if SKILL_PRINCIPLES.read_text(encoding="utf-8") != standard_body():
+        fail("(standard)", "the forge kit's copy has drifted from the shelf item",
+             "run: PYTHONPATH=. python -m scripts.skill_contract --sync")
     files = sorted(PLUGINS_DIR.rglob("SKILL.md"))
     for f in files:
         text = f.read_text(encoding="utf-8")

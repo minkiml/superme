@@ -133,8 +133,11 @@ def test_the_three_standards_ship_and_the_hub_holds_them():
 def test_wiring():
     ok("the shelf has a contract gate", Path("scripts/asset_contract.py").is_file())
     ok("…that the fast gate runs", "scripts.asset_contract" in src("scripts/check_fast.sh"))
-    ok("no gate reads the owner's workshop",
-       "general_docs" not in src("scripts/skill_contract.py"))
+    gate = src("scripts/skill_contract.py")
+    ok("no gate reads the owner's workshop", "general_docs" not in gate)
+    ok("the skills standard's two tracked copies are checked against each other",
+       "STANDARD_ASSET" in gate and "SKILL_PRINCIPLES" in gate)
+    ok("…with the shelf item as the source", "--sync" in gate)
     fe = src("web/frontend/src/features/config/sections/ProjectArtifacts.tsx")
     ok("the dashboard drops an unusable asset from the adopted list", "onOffer(a)" in fe)
     ok("…and greys it in the add-list rather than hiding it", "offerNote(a)" in fe)
