@@ -142,7 +142,7 @@ def test_wiring():
     ok("the dashboard drops an unusable asset from the adopted list", "onOffer(a)" in fe)
     ok("…and from the picker, which offers only what this project may take",
        "assets.filter(onOffer)" in fe)
-    ok("…so the counts are what say the shelf holds more", "on the shelf" in fe)
+    ok("…and counts what is available against what is adopted", "available ·" in fe)
     router = src("superme_agent/daemon/routers/dev/harness.py")
     ok("the API refuses to adopt what is not on offer", "is not on offer to this project" in router)
     ok("the publish stamp writes no dead field",

@@ -300,10 +300,8 @@ function AddAsset({ assets, contextId, onAdded }: { assets: AssetItem[]; context
             })}
           </div>
           <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
-            {/* What the shelf holds, what this project may take, and what it has taken. */}
             <span className="text-[11px] text-faint">
-              {assets.length} on the shelf · {offered.length} offered here ·{' '}
-              {offered.filter((a) => a.adopted).length} adopted
+              {offered.length} available · {offered.filter((a) => a.adopted).length} adopted
             </span>
             <span className="flex items-center gap-2">
             <button onClick={close} disabled={busy} className="rounded-md px-3 py-1.5 text-[12px] text-muted hover:text-fg">Cancel</button>
