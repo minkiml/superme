@@ -1,9 +1,7 @@
 ---
 name: expert-all
-description: Best practices for all and any techs and stacks - it must be included to all time to any project. Pull when doing any coding job; e.g., writing, reviewing, or debugging and so on.
+description: Best practices for any tech and any stack, meant to apply on every project at all times. Pull for any coding job: writing, reviewing, or debugging.
 enabled: true
-scope: universal_dev
-category: reference
 ---
 
 # "TEST" example 

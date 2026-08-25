@@ -2583,7 +2583,8 @@ export interface components {
         };
         /**
          * AssetItem
-         * @description One asset-pool item — `adopted` (in this repo's list) + `enabled` (adopted and not off).
+         * @description One asset-pool item. `available` is the shelf's switch, `restricted` is who may take it,
+         *     `enabled` is this repo's.
          */
         AssetItem: {
             /** Slug */
@@ -2598,6 +2599,16 @@ export interface components {
             adopted: boolean;
             /** Enabled */
             enabled: boolean;
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
+             * Restricted
+             * @default false
+             */
+            restricted: boolean;
         };
         /** AssetsResponse */
         AssetsResponse: {
@@ -2728,8 +2739,9 @@ export interface components {
         };
         /**
          * AuthorizationRequest
-         * @description A change to what the project INTENDS that a work-item could not settle alone, awaiting the
-         *     owner's grant or deny at review. Every scope is owner-reserved.
+         * @description A change to what the project intends, awaiting the owner's grant or deny at review.
+         *
+         *     Every scope is owner-reserved.
          */
         AuthorizationRequest: {
             /** Id */

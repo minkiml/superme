@@ -175,13 +175,16 @@ class ConstitutionToggleResponse(BaseModel):
 
 
 class AssetItem(BaseModel):
-    """One asset-pool item — `adopted` (in this repo's list) + `enabled` (adopted and not off)."""
+    """One asset-pool item. `available` is the shelf's switch, `restricted` is who may take it,
+    `enabled` is this repo's."""
     slug: str
     title: str
     description: str | None = None
     body: str
     adopted: bool
     enabled: bool
+    available: bool = True           # off → muted everywhere, each repo's own record kept
+    restricted: bool = False         # hub-only, and this is not the engine's cell
 
 
 class AssetsResponse(BaseModel):

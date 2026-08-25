@@ -4123,6 +4123,9 @@
   }
  },
  "superme_agent.core.operational": {
+  "HUB_CONTEXT_ID": {
+   "sig": "value:str"
+  },
   "ReservedScope": {
    "home": "superme_agent.core.operational",
    "methods": [],
@@ -4139,7 +4142,7 @@
   },
   "_activated_asset_items": {
    "home": "superme_agent.core.operational",
-   "sig": "def(activated: 'set[str] | None', asset_dir: 'Path | None' = None) -> 'list[dict]'"
+   "sig": "def(activated: 'set[str] | None', repo_dir: 'Path | None' = None, asset_dir: 'Path | None' = None) -> 'list[dict]'"
   },
   "_flip_constitution": {
    "home": "superme_agent.core.operational",
@@ -4183,10 +4186,14 @@
   },
   "adopt_repo_assets": {
    "home": "superme_agent.core.operational",
-   "sig": "def(repo_dir: 'Path | None', slugs: 'list[str]') -> 'list[str]'"
+   "sig": "def(repo_dir: 'Path | None', slugs: 'list[str]', *, asset_dir: 'Path | None' = None) -> 'list[str]'"
   },
   "annotations": {
    "sig": "value:_Feature"
+  },
+  "available_assets": {
+   "home": "superme_agent.core.operational",
+   "sig": "def(repo_dir: 'Path | None', asset_dir: 'Path | None' = None) -> 'list[dict]'"
   },
   "constitution_catalog": {
    "home": "superme_agent.core.operational",
@@ -4209,6 +4216,14 @@
    "sig": "def(root: 'Path', name: 'str') -> 'None'"
   },
   "is_foundational": {
+   "home": "superme_agent.core.operational",
+   "sig": "def(meta: 'dict') -> 'bool'"
+  },
+  "is_hub_home": {
+   "home": "superme_agent.core.operational",
+   "sig": "def(repo_dir: 'Path | None') -> 'bool'"
+  },
+  "is_hub_only": {
    "home": "superme_agent.core.operational",
    "sig": "def(meta: 'dict') -> 'bool'"
   },
@@ -4250,7 +4265,7 @@
   },
   "rank_assets_by_relevance": {
    "home": "superme_agent.core.operational",
-   "sig": "def(spec_text: 'str', activated: 'set[str] | None' = None, *, asset_dir: 'Path | None' = None, limit: 'int' = 8) -> 'list[dict]'"
+   "sig": "def(spec_text: 'str', activated: 'set[str] | None' = None, *, repo_dir: 'Path | None' = None, asset_dir: 'Path | None' = None, limit: 'int' = 8) -> 'list[dict]'"
   },
   "read_asset_pool": {
    "home": "superme_agent.core.operational",
@@ -4258,7 +4273,7 @@
   },
   "read_constitution_dir": {
    "home": "superme_agent.core.operational",
-   "sig": "def(directory: 'Path', *, origin: 'str') -> 'list[dict]'"
+   "sig": "def(directory: 'Path', *, origin: 'str', recursive: 'bool' = False) -> 'list[dict]'"
   },
   "read_plugin": {
    "home": "superme_agent.core.operational",
@@ -14875,7 +14890,7 @@
   },
   "adopt_repo_assets": {
    "home": "superme_agent.core.operational",
-   "sig": "def(repo_dir: 'Path | None', slugs: 'list[str]') -> 'list[str]'"
+   "sig": "def(repo_dir: 'Path | None', slugs: 'list[str]', *, asset_dir: 'Path | None' = None) -> 'list[str]'"
   },
   "annotations": {
    "sig": "value:_Feature"
@@ -14894,7 +14909,7 @@
   },
   "rank_assets_by_relevance": {
    "home": "superme_agent.core.operational",
-   "sig": "def(spec_text: 'str', activated: 'set[str] | None' = None, *, asset_dir: 'Path | None' = None, limit: 'int' = 8) -> 'list[dict]'"
+   "sig": "def(spec_text: 'str', activated: 'set[str] | None' = None, *, repo_dir: 'Path | None' = None, asset_dir: 'Path | None' = None, limit: 'int' = 8) -> 'list[dict]'"
   },
   "resolve_constitution": {
    "home": "superme_agent.core.operational",

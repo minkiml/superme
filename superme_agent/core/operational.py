@@ -200,14 +200,21 @@ def _title_of(body: str, slug: str) -> str:
     return words[:1].upper() + words[1:]
 
 
-def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
+def is_hub_only(meta: dict) -> bool:
+    """`hub-only: true` restricts a shelf item to the engine's own cell."""
+    v = meta.get("hub-only", meta.get("hub_only", "false"))
+    return str(v).strip().lower() in ("true", "1", "yes", "on")
+
+
+def read_constitution_dir(directory: Path, *, origin: str,
+                          recursive: bool = False) -> list[dict]:
     """Read one constitution home into a list of items. `origin` tags where it
     came from. Missing dir → []."""
     out: list[dict] = []
     d = Path(directory)
     if not d.is_dir():
         return out
-    for p in sorted(d.glob("*.md")):
+    for p in sorted(d.rglob("*.md") if recursive else d.glob("*.md")):
         if p.name.upper() in ("README.MD",):
             continue
         meta, body = parse_frontmatter(p.read_text(encoding="utf-8"))
@@ -220,7 +227,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
             "enabled": _is_enabled(meta),
             "foundational": is_foundational(meta),  # charter-pinned → not disable-able
             "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)
-            "scope": meta.get("scope"),
+            "hub_only": is_hub_only(meta),          # the engine's own cell may see it, no other repo
             "source": meta.get("source"),
             "created": meta.get("created"),
             "updated": meta.get("updated"),
@@ -234,10 +241,32 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
 # A repo activates slugs BY REFERENCE in `.assets` — no body is ever copied.
 
 
+HUB_CONTEXT_ID = "global"
+
+
 def read_asset_pool(asset_dir: Path | None = None) -> list[dict]:
-    """The asset pool: opt-in items in the shared `local-harness/asset/`, tagged origin='asset'."""
+    """The shared shelf, read as a tree. A slug is the filename, never the path."""
     from ..paths import ASSET_DIR
-    return read_constitution_dir(Path(asset_dir or ASSET_DIR), origin="asset")
+    return read_constitution_dir(Path(asset_dir or ASSET_DIR), origin="asset", recursive=True)
+
+
+def is_hub_home(repo_dir: Path | None) -> bool:
+    """True when this constitution home belongs to the engine's own cell."""
+    from ..paths import LOCAL_HARNESS_DIR
+    if repo_dir is None:
+        return False
+    try:
+        rel = Path(repo_dir).resolve().relative_to(Path(LOCAL_HARNESS_DIR).resolve())
+    except (ValueError, OSError):
+        return False
+    return rel.parts[:1] == (HUB_CONTEXT_ID,)
+
+
+def available_assets(repo_dir: Path | None, asset_dir: Path | None = None) -> list[dict]:
+    """Shelf items this repo may search, adopt and read: on globally, and not restricted away."""
+    hub = is_hub_home(repo_dir)
+    return [it for it in read_asset_pool(asset_dir)
+            if it["enabled"] and (hub or not it["hub_only"])]
 
 
 def _repo_asset_file(repo_dir: Path) -> Path:
@@ -288,13 +317,15 @@ def set_repo_asset(repo_dir: Path | None, slug: str, enabled: bool) -> dict[str,
     return states
 
 
-def adopt_repo_assets(repo_dir: Path | None, slugs: list[str]) -> list[str]:
+def adopt_repo_assets(repo_dir: Path | None, slugs: list[str], *,
+                      asset_dir: Path | None = None) -> list[str]:
     """Bulk-adopt any not-yet-adopted slugs. Already-adopted items, including
     disabled ones, are untouched. Returns the new slugs."""
     if repo_dir is None:
         return []
+    allowed = {it["slug"] for it in available_assets(repo_dir, asset_dir)}
     states = repo_asset_states(repo_dir)
-    newly = [s for s in slugs if s not in states]
+    newly = [s for s in slugs if s not in states and s in allowed]
     for s in newly:
         states[s] = True
     if newly:
@@ -312,11 +343,12 @@ def drop_repo_asset(repo_dir: Path | None, slug: str) -> dict[str, bool]:
     return states
 
 
-def _activated_asset_items(activated: set[str] | None, asset_dir: Path | None = None) -> list[dict]:
-    """Asset-pool items a repo has ENABLED (and that aren't globally killed via `enabled`)."""
+def _activated_asset_items(activated: set[str] | None, repo_dir: Path | None = None,
+                           asset_dir: Path | None = None) -> list[dict]:
+    """Asset-pool items this repo has enabled AND the shelf still offers it."""
     if not activated:
         return []
-    return [it for it in read_asset_pool(asset_dir) if it["slug"] in activated]
+    return [it for it in available_assets(repo_dir, asset_dir) if it["slug"] in activated]
 
 
 def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
@@ -326,7 +358,7 @@ def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
     items = read_constitution_dir(universal_dir, origin="universal")
     if repo_dir is not None:
         items += read_constitution_dir(repo_dir, origin="repo")
-    items += _activated_asset_items(activated, asset_dir)
+    items += _activated_asset_items(activated, repo_dir, asset_dir)
     return items
 
 
@@ -368,7 +400,8 @@ def _terms(text: str) -> set[str]:
 
 
 def rank_assets_by_relevance(
-    spec_text: str, activated: set[str] | None = None, *, asset_dir: Path | None = None, limit: int = 8,
+    spec_text: str, activated: set[str] | None = None, *, repo_dir: Path | None = None,
+    asset_dir: Path | None = None, limit: int = 8,
 ) -> list[dict]:
     """Rank the asset pool by keyword overlap with `spec_text`.
     Deterministic: a slug or description hit counts double. Read-only — activating is the owner's gate."""
@@ -377,7 +410,7 @@ def rank_assets_by_relevance(
         return []
     active = activated or set()
     ranked: list[dict] = []
-    for it in read_asset_pool(asset_dir):
+    for it in available_assets(repo_dir, asset_dir):
         head = _terms(f"{it['slug']} {it.get('description') or ''}")
         body = _terms(it.get("body") or "")
         hits = want & (head | body)
@@ -473,13 +506,11 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
         # `enabled` frontmatter lets runtime on/off be a flag flip, not a delete.
         content = with_frontmatter_default(content, "name", slug)
         content = with_frontmatter_default(content, "enabled", "true")
-        content = with_frontmatter_default(content, "scope", target_scope)
         if source:
             content = with_frontmatter_default(content, "source", source)
         if created:
             content = with_frontmatter_default(content, "created", created)
             content = with_frontmatter_default(content, "updated", created)
-        content = with_frontmatter_default(content, "category", "learned")
         path = home / f"{slug}.md"
         path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
         return str(path)

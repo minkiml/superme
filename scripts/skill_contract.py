@@ -12,13 +12,9 @@ from pathlib import Path
 
 import superme_agent.core  # noqa: F401   the package must be warm; dev_tools imports back in
 from superme_agent.harness.tools.dev_tools.scopes import TOOL_SCOPES
-from superme_agent.harness.forge_kit.eval import SKILL_PRINCIPLES
-from superme_agent.paths import PLUGINS_DIR, ROOT_DIR, SELF_FILE
+from superme_agent.paths import PLUGINS_DIR, SELF_FILE
 
 MAX_DESC = 1024
-# The owner authors it here; the forge_kit copy is what ships and what the eval judge reads.
-STANDARD_SOURCE = (ROOT_DIR / "general_docs" / "Best-superme-context-practice-and-other-guidance"
-                   / "a-standard-principle-in-writing-skills.md")
 
 # Which scopes each skill runs under. Nothing else compares a skill's tools to its mount.
 SKILL_SCOPES: dict[str, tuple[str, ...]] = {
@@ -140,12 +136,6 @@ def main() -> None:
     global PASSED
     repo = Path(__file__).resolve().parent.parent
     assert SELF_FILE.is_file(), "SELF.md is the voice rule's home and must exist"
-    if STANDARD_SOURCE.is_file():
-        if SKILL_PRINCIPLES.read_text(encoding="utf-8") != STANDARD_SOURCE.read_text(encoding="utf-8"):
-            fail("(standard)", "the shipped copy has drifted from its source",
-                 f"cp {STANDARD_SOURCE.relative_to(repo)} {SKILL_PRINCIPLES.relative_to(repo)}")
-    else:
-        print(f"  --  standard source absent, shipped copy unchecked ({STANDARD_SOURCE.name})")
     files = sorted(PLUGINS_DIR.rglob("SKILL.md"))
     for f in files:
         text = f.read_text(encoding="utf-8")

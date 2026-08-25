@@ -22,9 +22,11 @@ superme-knowledge/
 # Snapshots of it, taken before each write and once per boot. Local state, real paths.
 /superme_agent/config/repos-backups/
 
-# Per-user operational cells. Only the shared asset pool and this dir's README ship.
+# Per-user operational cells. The shared asset pool, this dir's README and the engine's own cell
+# ship — every guest runs the same engine, so its knowledge space is product surface.
 superme_agent/local-harness/*
 !superme_agent/local-harness/asset/
+!superme_agent/local-harness/global/
 !superme_agent/local-harness/README.md
 
 # Per-worktree vet-environment state, written by the vet skill's boot script.

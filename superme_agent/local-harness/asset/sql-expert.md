@@ -2,8 +2,6 @@
 name: sql-expert
 description: SQL best practices (indexing, query shape, transactions, migrations). Pull when writing, reviewing, or debugging SQL / schema / query-heavy code.
 enabled: true
-scope: universal_dev
-category: reference
 ---
 
 # SQL expert

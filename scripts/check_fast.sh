@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast, read-only gate to run between edits. Seconds, and it mutates nothing.
 #
-#   bash scripts/check_fast.sh                 # routes + surface + layers + encodings + tools + skills + prompts + tsc
+#   bash scripts/check_fast.sh                 # routes + surface + layers + encodings + tools + skills + assets + prompts + tsc
 #   STRICT=1 bash scripts/check_fast.sh        # also fail on ANY OpenAPI shape drift
 #
 # Every check reads the code on disk, never a running daemon: one serving older code would
@@ -45,6 +45,10 @@ echo "▸ skill contract"
 PYTHONPATH=. "$PY" -m scripts.skill_contract >/dev/null; SKILL=$?
 [ $SKILL -ne 0 ] && PYTHONPATH=. "$PY" -m scripts.skill_contract | tail -n +2
 
+echo "▸ asset contract"
+PYTHONPATH=. "$PY" -m scripts.asset_contract >/dev/null; ASSET=$?
+[ $ASSET -ne 0 ] && PYTHONPATH=. "$PY" -m scripts.asset_contract | tail -n +2
+
 echo "▸ kernel prompts (byte baseline)"
 # Fixture paths it cannot create warn on stderr; only a failure is worth printing.
 PYTHONPATH=. "$PY" scripts/test_thread3.py >/dev/null 2>&1; PROMPT=$?
@@ -54,8 +58,8 @@ echo "▸ frontend typecheck"
 ( cd web/frontend && npx -y tsc --noEmit ); TSC=$?
 
 echo "————"
-if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $API -eq 0 ] && [ $LAYERS -eq 0 ] && [ $ENC -eq 0 ] && [ $DESC -eq 0 ] && [ $SKILL -eq 0 ] && [ $PROMPT -eq 0 ] && [ $TSC -eq 0 ]; then
+if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $API -eq 0 ] && [ $LAYERS -eq 0 ] && [ $ENC -eq 0 ] && [ $DESC -eq 0 ] && [ $SKILL -eq 0 ] && [ $ASSET -eq 0 ] && [ $PROMPT -eq 0 ] && [ $TSC -eq 0 ]; then
   echo "✓ FAST GATE GREEN"; exit 0
 else
-  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY api=$API layers=$LAYERS enc=$ENC desc=$DESC skill=$SKILL prompt=$PROMPT tsc=$TSC)"; exit 1
+  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY api=$API layers=$LAYERS enc=$ENC desc=$DESC skill=$SKILL asset=$ASSET prompt=$PROMPT tsc=$TSC)"; exit 1
 fi

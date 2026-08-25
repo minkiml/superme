@@ -103,8 +103,8 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
                 tint: 'universal',
                 icon: Package,
                 empty: 'No expertise adopted for this repo yet.',
-                action: <AddAsset pool={assets.filter((a) => !a.adopted)} contextId={contextId} onAdded={load} />,
-                groups: [{ cards: assets.filter((a) => a.adopted).map((a) => assetCard(a, contextId, load)) }],
+                action: <AddAsset pool={assets.filter((a) => !(a.adopted && onOffer(a)))} contextId={contextId} onAdded={load} />,
+                groups: [{ cards: assets.filter((a) => a.adopted && onOffer(a)).map((a) => assetCard(a, contextId, load)) }],
               },
             ]}
           />
@@ -210,6 +210,17 @@ function constitutionCard(
   }
 }
 
+// A withdrawn or restricted asset has no working toggle, so it leaves the adopted list and greys in
+// the picker. Its adoption record survives and reappears the moment the shelf offers it again.
+function onOffer(a: AssetItem): boolean {
+  return a.available && !a.restricted
+}
+
+function offerNote(a: AssetItem): string {
+  if (!a.available) return 'Turned off for every project'
+  return 'Reserved for SuperMe itself'
+}
+
 // An adopted pool asset. Disabling keeps it adopted; Drop un-adopts it and returns it to the picker.
 function assetCard(a: AssetItem, contextId: string, reload: () => void): ScopeCard {
   const act = (action: AssetAction) => { assetAction(a.slug, action, contextId).then(reload).catch(() => {}) }
@@ -283,8 +294,9 @@ function AddAsset({ pool, contextId, onAdded }: { pool: AssetItem[]; contextId: 
             )}
             {pool.map((a) => {
               const on = sel.has(a.slug)
+              const off = !onOffer(a)
               return (
-                <button key={a.slug} onClick={() => toggle(a.slug)} className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left ${on ? 'border-dev bg-hover' : 'border-line bg-surface hover:bg-hover'}`}>
+                <button key={a.slug} onClick={() => toggle(a.slug)} disabled={off} title={off ? offerNote(a) : undefined} className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left ${off ? 'cursor-not-allowed border-line bg-surface opacity-50' : on ? 'border-dev bg-hover' : 'border-line bg-surface hover:bg-hover'}`}>
                   <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-dev bg-dev text-white' : 'border-line'}`}>
                     {on && <Check className="h-3 w-3" />}
                   </span>
@@ -292,6 +304,7 @@ function AddAsset({ pool, contextId, onAdded }: { pool: AssetItem[]; contextId: 
                     <span className="flex items-center gap-2">
                       <span className="truncate text-[13px] text-fg">{a.title}</span>
                       <span className="font-mono text-[10px] text-faint">{a.slug}</span>
+                      {off && <span className="shrink-0 rounded border border-line px-1 text-[10px] text-faint">{offerNote(a)}</span>}
                     </span>
                     {a.description && <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{a.description}</p>}
                   </span>

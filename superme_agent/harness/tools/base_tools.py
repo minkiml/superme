@@ -65,7 +65,7 @@ def _adopt_knowledge_assets(*, activated: set | None = None, repo_dir: Path | No
             limit = max(1, min(20, int(args.get("limit") or 8)))
         except (TypeError, ValueError):
             limit = 8
-        ranked = rank_assets_by_relevance(spec, activated, limit=limit)
+        ranked = rank_assets_by_relevance(spec, activated, repo_dir=repo_dir, limit=limit)
         if not ranked:
             return _ok("No knowledge assets look relevant to this spec.")
         confident = [r for r in ranked if r["confident"] and not r["activated"]]

@@ -681,10 +681,15 @@
           "type": "object"
         },
         "AssetItem": {
-          "description": "One asset-pool item \u2014 `adopted` (in this repo's list) + `enabled` (adopted and not off).",
+          "description": "One asset-pool item. `available` is the shelf's switch, `restricted` is who may take it,\n`enabled` is this repo's.",
           "properties": {
             "adopted": {
               "title": "Adopted",
+              "type": "boolean"
+            },
+            "available": {
+              "default": true,
+              "title": "Available",
               "type": "boolean"
             },
             "body": {
@@ -704,6 +709,11 @@
             },
             "enabled": {
               "title": "Enabled",
+              "type": "boolean"
+            },
+            "restricted": {
+              "default": false,
+              "title": "Restricted",
               "type": "boolean"
             },
             "slug": {
@@ -1074,7 +1084,7 @@
           "type": "object"
         },
         "AuthorizationRequest": {
-          "description": "A change to what the project INTENDS that a work-item could not settle alone, awaiting the\nowner's grant or deny at review. Every scope is owner-reserved.",
+          "description": "A change to what the project intends, awaiting the owner's grant or deny at review.\n\nEvery scope is owner-reserved.",
           "properties": {
             "doc": {
               "title": "Doc",

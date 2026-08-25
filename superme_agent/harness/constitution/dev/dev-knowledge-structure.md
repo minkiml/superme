@@ -3,8 +3,6 @@ name: dev-knowledge-structure
 description: The dev-knowledge contract: the general/ anchor docs, the deliverable→wave scaffold, the work-item frontmatter schema, and the inbox row shape. Use when you read or write a general/ doc or an item.md, or need an exact field or enum value. Not for how learning artifacts are governed — that's learning-pipeline.
 enabled: true
 foundational: true
-scope: universal_dev
-category: reference
 ---
 
 # Dev-knowledge structure

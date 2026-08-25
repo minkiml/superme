@@ -353,13 +353,16 @@ async def dev_harness_assets(context_id: str = "global") -> dict:
     """The shared asset pool, each flagged with whether THIS repo has adopted and enabled it.
 
     The pool is shared and adoption is per-repo, so nothing copies a body."""
-    from ....core.operational import read_asset_pool, repo_asset_states
+    from ....core.operational import read_asset_pool, repo_asset_states, is_hub_home
     from ....paths import LOCAL_HARNESS_DIR
-    states = repo_asset_states(local_harness_root(context_id) / "constitution")
+    home = local_harness_root(context_id) / "constitution"
+    states = repo_asset_states(home)
+    hub = is_hub_home(home)
     out = [{
         "slug": it["slug"], "title": it["title"],
         "description": it.get("description"), "body": it["body"],
         "adopted": it["slug"] in states, "enabled": states.get(it["slug"], False),
+        "available": it["enabled"], "restricted": it["hub_only"] and not hub,
     } for it in read_asset_pool()]
     return {"context_id": context_id, "assets": out}
 
@@ -369,11 +372,17 @@ async def dev_harness_asset_action(slug: str, body: AssetActionBody,
                                    dev_store: DevStore = Depends(get_dev_store)) -> dict:
     """Per-repo asset curation: `adopt` (+ Add), `enable`/`disable` (toggle, keeps adoption), or `drop`
     (un-adopt). Writes the repo's `.assets` list — no body copy. Takes effect on the next dev turn."""
-    from ....core.operational import read_asset_pool, set_repo_asset, drop_repo_asset
+    from ....core.operational import (read_asset_pool, available_assets, set_repo_asset,
+                                      drop_repo_asset)
     from ....paths import LOCAL_HARNESS_DIR
     if slug not in {it["slug"] for it in read_asset_pool()}:
         raise HTTPException(status_code=404, detail="asset not found in the pool")
     home = local_harness_root(body.context_id) / "constitution"
+    # Dropping an asset the shelf withdrew is the one curation left, so only taking it is refused.
+    if body.action in ("adopt", "enable") and slug not in {
+            it["slug"] for it in available_assets(home)}:
+        raise HTTPException(status_code=409,
+                            detail=f"'{slug}' is not on offer to this project")
     if body.action == "drop":
         states = drop_repo_asset(home, slug)
     elif body.action in ("adopt", "enable"):
