@@ -19,7 +19,7 @@ import rust from 'highlight.js/lib/languages/rust'
 import diff from 'highlight.js/lib/languages/diff'
 import ini from 'highlight.js/lib/languages/ini'
 
-// Registered explicitly: the all-languages build is a megabyte of grammars nothing here contains.
+// Registered one by one, because the all-languages build is a megabyte nothing here needs.
 const LANGS: Record<string, unknown> = {
   javascript, typescript, python, bash, json, yaml, markdown, css, xml, sql, go, rust, diff, ini,
 }
@@ -48,13 +48,13 @@ export function langFor(path: string): string | null {
 }
 
 /**
- * The language a fence names, or null. An unlabelled fence stays null on purpose: auto-detection
- * paints ASCII trees and shell transcripts as code that means something.
+ * The language a fence names, or null. An unlabelled fence stays null on purpose, because
+ * auto-detection paints ASCII trees and shell transcripts as code that means something.
  */
 export function langForFence(name: string | undefined): string | null {
   const n = (name || '').trim().toLowerCase()
   if (!n) return null
-  if (hljs.getLanguage(n)) return n          // hljs knows its own aliases: py, js, sh, yml
+  if (hljs.getLanguage(n)) return n          // hljs knows its own aliases like py, js, sh, yml
   const mapped = EXT_LANG[n]
   return mapped && hljs.getLanguage(mapped) ? mapped : null
 }

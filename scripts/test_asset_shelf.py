@@ -1,4 +1,4 @@
-"""The knowledge shelf: what a repo may see, take and read.
+"""The knowledge shelf, and what a repo may see, take and read.
 
 An item on the shelf belongs to no project. Three switches gate it, and each reaches a different
 distance.
@@ -35,7 +35,7 @@ def item(name: str, *, enabled: str = "true", hub_only: str | None = None) -> st
 
 
 def shelf() -> Path:
-    """A throwaway pool: one open item, one restricted, one withdrawn, one in a subfolder."""
+    """A throwaway pool holding one open item, one restricted, one withdrawn, one nested."""
     d = Path(tempfile.mkdtemp(prefix="shelf-"))
     (d / "open-one.md").write_text(item("open-one"), encoding="utf-8")
     (d / "restricted-one.md").write_text(item("restricted-one", hub_only="true"), encoding="utf-8")

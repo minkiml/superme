@@ -263,7 +263,7 @@ def is_hub_home(repo_dir: Path | None) -> bool:
 
 
 def available_assets(repo_dir: Path | None, asset_dir: Path | None = None) -> list[dict]:
-    """Shelf items this repo may search, adopt and read: on globally, and not restricted away."""
+    """Shelf items this repo may search, adopt and read. Globally on, and not restricted away."""
     hub = is_hub_home(repo_dir)
     return [it for it in read_asset_pool(asset_dir)
             if it["enabled"] and (hub or not it["hub_only"])]
@@ -345,7 +345,7 @@ def drop_repo_asset(repo_dir: Path | None, slug: str) -> dict[str, bool]:
 
 def _activated_asset_items(activated: set[str] | None, repo_dir: Path | None = None,
                            asset_dir: Path | None = None) -> list[dict]:
-    """Asset-pool items this repo has enabled AND the shelf still offers it."""
+    """Asset-pool items this repo enabled that the shelf still offers."""
     if not activated:
         return []
     return [it for it in available_assets(repo_dir, asset_dir) if it["slug"] in activated]
@@ -403,8 +403,9 @@ def rank_assets_by_relevance(
     spec_text: str, activated: set[str] | None = None, *, repo_dir: Path | None = None,
     asset_dir: Path | None = None, limit: int = 8,
 ) -> list[dict]:
-    """Rank the asset pool by keyword overlap with `spec_text`.
-    Deterministic: a slug or description hit counts double. Read-only — activating is the owner's gate."""
+    """Deterministically rank the asset pool by keyword overlap with `spec_text`.
+
+    A slug or description hit counts double. Read-only, adopting is the owner's gate."""
     want = _terms(spec_text)
     if not want:
         return []
@@ -496,7 +497,7 @@ def ensure_plugin_manifest(root: Path, name: str) -> None:
 def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *,
                      slug: str, content: str, source: str = "agent",
                      created: str = "") -> str:
-    """Gate-2 publish: write a PUBLISHED artifact to its live home, return the path.
+    """Write an approved artifact to its live home and return the path.
 
     Server-side fields are stamped as defaults, never clobbering the agent's."""
     slug = slugify(slug)

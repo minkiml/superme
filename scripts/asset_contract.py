@@ -14,7 +14,7 @@ from superme_agent.paths import ASSET_DIR, CONSTITUTION_DIR
 
 DESC_MIN, DESC_MAX = 50, 160
 BOOLEANS = ("true", "false")
-# Deleted fields. Both named a thing nothing read, and both collide with a live meaning elsewhere.
+# Each name means something else in a live mechanism, so a file carrying it misleads.
 DEAD_FIELDS = ("scope", "category")
 
 FAILED: list[str] = []

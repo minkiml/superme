@@ -22,8 +22,8 @@ superme-knowledge/
 # Snapshots of it, taken before each write and once per boot. Local state, real paths.
 /superme_agent/config/repos-backups/
 
-# Per-user operational cells. The shared asset pool, this dir's README and the engine's own cell
-# ship — every guest runs the same engine, so its knowledge space is product surface.
+# Per-user operational cells. The engine's own cell ships with the pool and the README,
+# because every guest runs that same engine.
 superme_agent/local-harness/*
 !superme_agent/local-harness/asset/
 !superme_agent/local-harness/global/

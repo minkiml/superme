@@ -212,8 +212,8 @@ function constitutionCard(
   }
 }
 
-// A withdrawn or restricted asset is absent from both lists rather than shown dead. Its adoption
-// record survives and reappears the moment the shelf offers it again.
+// A withdrawn or restricted asset leaves both lists rather than sit there dead. Its adoption
+// record survives, so re-offering it restores this repo exactly.
 function onOffer(a: AssetItem): boolean {
   return a.available && !a.restricted
 }
@@ -246,8 +246,8 @@ function assetCard(a: AssetItem, contextId: string, reload: () => void,
   }
 }
 
-// The preview for one shelf item. Read-only: the shelf is shared, so an edit here would rewrite it
-// for every project that adopted it.
+// The preview for one shelf item. Read-only, because the shelf is shared and an edit would
+// rewrite it for every project.
 function AssetModal({ asset, onClose }: { asset: AssetItem; onClose: () => void }) {
   return (
     <Modal onClose={onClose} column maxW="max-w-3xl" z="z-[60]">

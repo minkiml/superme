@@ -102,8 +102,8 @@ function internalSlug(href: string | undefined): string | null {
   return m[1].toLowerCase() === 'readme' ? 'overview' : m[1]
 }
 
-// Only INLINE code takes the scope hue — it names a thing in prose. A fenced block is a program
-// and gets syntax colours instead. Literal class strings, so the JIT picks them up.
+// Inline code alone takes the scope hue, because it names a thing in prose. A fenced block is a
+// program and gets syntax colours. Literal class strings, so the JIT picks them up.
 const TONE: Record<string, string> = {
   universal: '[&_code]:text-universal [&_pre_code]:text-fg',
   dev: '[&_code]:text-dev [&_pre_code]:text-fg',
@@ -112,7 +112,7 @@ const TONE: Record<string, string> = {
 // Bold takes one consistent colour across every tinted preview, so emphasis reads uniformly.
 const BOLD_TINT = '[&_strong]:text-warn'
 
-// A fence's children arrive as a string or an array of them. Joining with `String()` would splice
+// A fence's children arrive as a string or an array of them, and `String()` would splice
 // a comma between the parts.
 function textOf(node: ReactNode): string {
   if (typeof node === 'string') return node
@@ -154,7 +154,7 @@ export default function Markdown({
 }: {
   text: string
   variant?: 'chat' | 'doc' | 'report'
-  /** Required: an untinted render silently drops the code and bold hues. */
+  /** Required, because an untinted render silently drops the code and bold hues. */
   tone: 'universal' | 'dev' | 'core'
   onInternalLink?: (slug: string) => void
 }) {
@@ -169,8 +169,8 @@ export default function Markdown({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Only a fence that NAMES a language is highlighted: auto-detection paints ASCII trees
-          // and shell transcripts as code that means something.
+          // Only a fence that names a language is highlighted. Auto-detection paints ASCII
+          // trees and shell transcripts as code that means something.
           code({ className, children, ...props }) {
             const lang = langForFence(/language-(\w+)/.exec(className || '')?.[1])
             if (!lang) return <code className={className} {...props}>{children}</code>

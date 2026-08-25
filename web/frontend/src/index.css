@@ -159,11 +159,11 @@ select.bare {
 
 /* ── Syntax highlighting (highlight.js token classes) ───────────────────────
    A canned hljs theme is a second fixed palette that would ignore the light/dark switch,
-   so the token classes map onto OUR tokens and re-theme with everything else.
+   so the token classes map onto this app's own tokens and re-theme with everything else.
 
-   The ROLES are the conventional ones every editor agrees on — keywords purple, strings
-   green, numbers and literals amber, functions blue, types teal, keys coral, comments grey
-   — so a reader already knows what each colour means. Everything unlisted inherits. */
+   The roles are the ones every editor agrees on, so a reader already knows what each colour
+   means. Keywords purple, strings green, numbers amber, functions blue, types teal, keys
+   coral, comments grey. Everything unlisted inherits. */
 
 /* keywords, control flow, tag names */
 .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-meta .hljs-keyword {
@@ -179,7 +179,7 @@ select.bare {
 .hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-meta .hljs-string, .hljs-link {
   color: rgb(var(--c-core));
 }
-/* numbers and the literals that stand beside them: true, false, null */
+/* numbers, and the literals that stand beside them */
 .hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: rgb(var(--c-warn)); }
 /* keys, attributes, properties, shell variables */
 .hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable,
@@ -192,7 +192,7 @@ select.bare {
 /* comments and annotations */
 .hljs-comment, .hljs-quote { color: rgb(var(--c-faint)); font-style: italic; }
 .hljs-meta, .hljs-doctag { color: rgb(var(--c-muted)); }
-/* plain by design: these carry structure, not meaning */
+/* plain by design, because these carry structure rather than meaning */
 .hljs-params, .hljs-subst, .hljs-operator, .hljs-punctuation { color: rgb(var(--c-fg)); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
