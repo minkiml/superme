@@ -161,22 +161,38 @@ select.bare {
    A canned hljs theme is a second fixed palette that would ignore the light/dark switch,
    so the token classes map onto OUR tokens and re-theme with everything else.
 
-   Few colours on purpose: a diff already carries red/green line tints, and a rainbow on
-   top competes with the signal the reader came for. Everything unlisted inherits. */
-.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-type, .hljs-selector-tag {
+   The ROLES are the conventional ones every editor agrees on — keywords purple, strings
+   green, numbers and literals amber, functions blue, types teal, keys coral, comments grey
+   — so a reader already knows what each colour means. Everything unlisted inherits. */
+
+/* keywords, control flow, tag names */
+.hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-meta .hljs-keyword {
   color: rgb(var(--c-universal));
 }
-.hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-meta .hljs-string {
+/* types, classes, built-ins */
+.hljs-type, .hljs-built_in, .hljs-title.class_, .hljs-selector-class {
+  color: rgb(var(--c-kind-build));
+}
+/* function names and section headings */
+.hljs-title, .hljs-title.function_, .hljs-section { color: rgb(var(--c-accent-text)); }
+/* strings */
+.hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-meta .hljs-string, .hljs-link {
   color: rgb(var(--c-core));
 }
+/* numbers and the literals that stand beside them: true, false, null */
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: rgb(var(--c-warn)); }
+/* keys, attributes, properties, shell variables */
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable,
+.hljs-selector-attr, .hljs-selector-pseudo {
+  color: rgb(var(--c-danger));
+}
+/* a patch carries its own two colours */
+.hljs-addition { color: rgb(var(--c-success)); }
+.hljs-deletion { color: rgb(var(--c-danger)); }
+/* comments and annotations */
 .hljs-comment, .hljs-quote { color: rgb(var(--c-faint)); font-style: italic; }
-.hljs-number, .hljs-symbol { color: rgb(var(--c-warn)); }
-.hljs-title, .hljs-title.class_, .hljs-title.function_, .hljs-section {
-  color: rgb(var(--c-accent-text));
-}
-.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable {
-  color: rgb(var(--c-fg));
-}
-.hljs-meta, .hljs-doctag, .hljs-params { color: rgb(var(--c-muted)); }
+.hljs-meta, .hljs-doctag { color: rgb(var(--c-muted)); }
+/* plain by design: these carry structure, not meaning */
+.hljs-params, .hljs-subst, .hljs-operator, .hljs-punctuation { color: rgb(var(--c-fg)); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
