@@ -2,6 +2,7 @@
 name: expert-all
 description: Best practices for any tech and any stack, meant to apply on every project at all times. Pull for any coding job: writing, reviewing, or debugging.
 enabled: true
+hub-only: false
 ---
 
 # "TEST" example 
