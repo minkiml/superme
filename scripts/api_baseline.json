@@ -13181,10 +13181,10 @@
   "CONSTITUTION_DIR": {
    "sig": "value:Path"
   },
-  "FORGE_KIT": {
+  "DEV_PLUGIN_DIR": {
    "sig": "value:Path"
   },
-  "HARNESS_DIR": {
+  "FORGE_KIT": {
    "sig": "value:Path"
   },
   "Init": {

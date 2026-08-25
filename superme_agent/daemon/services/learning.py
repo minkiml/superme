@@ -20,11 +20,11 @@ from ...core import kernel_speech
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, deny_all, learning_write_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from ...paths import HARNESS_DIR, CONSTITUTION_DIR
+from ...paths import DEV_PLUGIN_DIR, CONSTITUTION_DIR
 
 log = logging.getLogger("superme-agent")
 
-FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-eval toolkit
+FORGE_KIT = DEV_PLUGIN_DIR / "forge_kit"   # the forge agent's lint + behavioural-eval toolkit
 
 
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------

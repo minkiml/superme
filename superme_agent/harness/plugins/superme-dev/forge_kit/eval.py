@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from ...core.vocab import console
 
 TIMEOUT_S = 180
 # Read-only tools and a turn cap, so an unvetted artifact can neither mutate the machine nor run
@@ -144,11 +143,21 @@ def _run_footprint(env_obj):
     return {"context_tokens": round(input_cum / turns), "output_tokens": output, "turns": turns}
 
 
+def _console_argv(tool: str, *args: str) -> list[str] | None:
+    """The argv that runs `tool`, or None when absent. A Windows `.cmd` shim needs a shell."""
+    exe = shutil.which(tool)
+    if not exe:
+        return None
+    if os.name == "nt" and os.path.splitext(exe)[1].lower() in (".cmd", ".bat"):
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/c", exe, *args]
+    return [exe, *args]
+
+
 def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
     """One hermetic `claude -p` call, JSON output, so real run metrics come back with the reply.
 
     A throwaway cwd, so the operated repo cannot leak into the judgment."""
-    cmd = console.argv("claude", "-p", "--strict-mcp-config", "--output-format", "json")
+    cmd = _console_argv("claude", "-p", "--strict-mcp-config", "--output-format", "json")
     if cmd is None:
         raise RuntimeError("the Claude CLI is not on PATH")
     if extra_args:

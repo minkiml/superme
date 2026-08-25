@@ -13,12 +13,12 @@ from pathlib import Path
 import superme_agent.core  # noqa: F401   the package must be warm; dev_tools imports back in
 from superme_agent.core.operational import parse_frontmatter
 from superme_agent.harness.tools.dev_tools.scopes import TOOL_SCOPES
-from superme_agent.harness.forge_kit.eval import SKILL_PRINCIPLES
-from superme_agent.paths import ASSET_DIR, PLUGINS_DIR, SELF_FILE
+from superme_agent.paths import ASSET_DIR, DEV_PLUGIN_DIR, PLUGINS_DIR, SELF_FILE
 
 MAX_DESC = 1024
 # The judge reads from a throwaway cwd, so the shelf item cannot be the standard's only home.
 STANDARD_ASSET = ASSET_DIR / "authoring" / "skill-authoring.md"
+SKILL_PRINCIPLES = DEV_PLUGIN_DIR / "forge_kit" / "references" / "principle-for-skills.md"
 
 # Which scopes each skill runs under. Nothing else compares a skill's tools to its mount.
 SKILL_SCOPES: dict[str, tuple[str, ...]] = {
@@ -141,6 +141,18 @@ def check_tools(skill: str, body: str) -> list[tuple[str, str]]:
     return bad
 
 
+# A relative import needs a parent package, which a file run by path does not have.
+_RELATIVE_IMPORT = re.compile(r"(?m)^\s*from\s+\.")
+
+
+def check_plugin_scripts() -> None:
+    """A plugin's own `.py` is launched by path, so it may only import stdlib and its neighbours."""
+    for f in sorted(PLUGINS_DIR.rglob("*.py")):
+        if m := _RELATIVE_IMPORT.search(f.read_text(encoding="utf-8")):
+            fail(f"{f.relative_to(PLUGINS_DIR)}", "relative import in a file run by path",
+                 f"{m.group(0).strip()}… inline it, or use the standard library")
+
+
 def main() -> None:
     global PASSED
     if "--sync" in sys.argv:
@@ -149,6 +161,7 @@ def main() -> None:
         return
     repo = Path(__file__).resolve().parent.parent
     assert SELF_FILE.is_file(), "SELF.md is the voice rule's home and must exist"
+    check_plugin_scripts()
     # Two tracked copies of one rule, so the check runs on every machine.
     if SKILL_PRINCIPLES.read_text(encoding="utf-8") != standard_body():
         fail("(standard)", "the forge kit's copy has drifted from the shelf item",

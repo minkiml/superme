@@ -42,7 +42,7 @@ rest is catalog-then-pull.
      **always-dumped** layer, plus an optional `charter.local.md` from the host's local harness.
    - `constitution/` — operational intelligence, **frontmatter-first**: the catalog (name +
      description) is always on; a body is pulled on demand (`read_constitution`).
-   - `plugins/` (skills + subagents, likewise frontmatter-first), `tools/`, `policy.py`, `forge_kit/`.
+   - `plugins/` (skills + subagents, likewise frontmatter-first, plus the dev plugin's `forge_kit/`), `tools/`, `policy.py`.
 2. **Local harness** — `local-harness/<id>/<mode>/`: this host's own operational content.
 3. **Working knowledge** — `superme-knowledge/<id>-knowledge/` (pulled on demand; see its README).
 4. **DB-backed knowledge** — the inbox + activity log, read through context-scoped tools.
@@ -58,7 +58,7 @@ superme_agent/
 ├─ core/            host-agnostic agent engine (no transport)
 ├─ daemon/          FastAPI service (:8787) — routers/ schemas/ services/
 ├─ gateway/         contexts.py — (repo, mode) → Context resolution
-├─ harness/         the UNIVERSAL portable brain (SELF, charters, constitution, plugins, tools, policy, forge_kit)
+├─ harness/         the UNIVERSAL portable brain (SELF, charters, constitution, plugins, tools, policy)
 ├─ local-harness/   per-host local harness — <id>/<mode>/
 ├─ config/          system.yaml (tracked) · repos.yaml (local, seeded from repos.example.yaml)
 └─ paths.py         where everything is — paths, .env, the daemon's address
