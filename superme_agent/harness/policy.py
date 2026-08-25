@@ -57,7 +57,7 @@ SAFE_TOOLS = {
     "mcp__dev__write_checkpoint",
     # Merges trunk INTO the item's own worktree only; conflicts abort and report.
     "mcp__dev__sync_from_anchor_branch",
-    # Stages edit ops item-local, applied later and atomically with the owner's merge.
+    # Writes the anchor docs through validated ops, at close, after the merge locked the code.
     "mcp__dev__apply_knowledge_edits",
     # Writes only the item's own plan.md, through validated ops — the re-plan's only way to change
     # it.

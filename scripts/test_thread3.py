@@ -269,6 +269,10 @@ def render_registry() -> dict[str, str]:
                                                         shell_cwd="/wt"),
         "preamble.work_item.review.repo_root": KS.work_item_preamble(
             "fix1", {**item, "phase": "review"}, str(d), interactive=False, shell_cwd="/repo"),
+        # Exactly what close.py sends: it is the one phase handed the anchor tree.
+        "preamble.work_item.close": KS.work_item_preamble(
+            "fix1", {**item, "phase": "close"}, str(d), interactive=False, shell_cwd="/repo",
+            anchor_dir="/know/dev/general"),
         "preamble.work_item.compacted": KS.work_item_preamble(
             "fix1", item, str(d), shell_cwd="/wt",
             compacted_checkpoint=str(d / "checkpoints/20260101T000000.md")),

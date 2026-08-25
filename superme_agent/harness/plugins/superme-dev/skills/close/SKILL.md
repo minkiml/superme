@@ -41,9 +41,10 @@ Work one section at a time, in this order. Do all of them before you call anythi
 1. **Test that the section is doc-worthy.** One question: does it now read as FALSE to someone who
    has never heard of this item? Yes → it owes an edit. No → it owes nothing, and you write nothing.
    A rename, a comment pass, an internal refactor and a test-only change all come out no.
-2. **Read the section as it stands right now**, from the anchor doc itself. Another item may have
-   closed into it while this one was in flight, so what is on disk is what you are editing — never
-   what `review.md` quoted and never what you remember.
+2. **Read the section as it stands right now**, from the anchor doc itself — the folder holding
+   them is in your `## Current focus` block. Another item may have closed into it while this one
+   was in flight, so what is on disk is what you are editing, never what `review.md` quoted and
+   never what you remember.
 3. **Compose the whole body the section should END with**, folding your change into the step-2 text.
    Keep every clause that is still true; a body that mentions only this item's work has deleted
    somebody else's.

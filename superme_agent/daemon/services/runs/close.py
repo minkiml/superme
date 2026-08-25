@@ -79,6 +79,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     # runner sends.
     focus = kernel_speech.work_item_preamble(
         item_id, item, str(item_dir), interactive=False, shell_cwd=ctx.cwd,
+        anchor_dir=str(ctx.internal_root / "dev" / "general"),
         compacted_checkpoint=compacted_checkpoint(ctx, item, session_id))
     final_tokens = final_usage = final_session = None
     run_started = time.time()

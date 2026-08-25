@@ -3972,7 +3972,7 @@
   },
   "work_item_preamble": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None) -> str"
+   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None, anchor_dir=None) -> str"
   },
   "write_trigger": {
    "home": "superme_agent.core.kernel_speech",
@@ -10937,7 +10937,7 @@
   },
   "work_item_preamble": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None) -> str"
+   "sig": "def(item_id: str, item: dict, item_dir, *, interactive: bool = True, compacted_checkpoint: str | None = None, shell_cwd=None, anchor_dir=None) -> str"
   },
   "ws_agent": {
    "home": "superme_agent.daemon.routers.ws",

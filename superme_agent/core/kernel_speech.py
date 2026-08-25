@@ -349,12 +349,16 @@ def _shell_is_in(shell_cwd, worktree) -> bool:
 
 
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
-                       compacted_checkpoint: str | None = None, shell_cwd=None) -> str:
+                       compacted_checkpoint: str | None = None, shell_cwd=None,
+                       anchor_dir=None) -> str:
     """EVERY work-item-bound turn · per-turn. A THIN contract derived from
     (kind, phase); the procedure lives in the skill.
 
     `shell_cwd` is the cwd the caller will actually run the turn in. Only build and vet run inside
-    the worktree; told otherwise, a review reaches for `cd` and is refused."""
+    the worktree; told otherwise, a review reaches for `cd` and is refused.
+
+    `anchor_dir` is passed by the one phase that edits the anchor docs: it must read each section
+    before replacing it, and the tree is outside both the repo and the item folder."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
@@ -371,7 +375,10 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         f"- work-item: **{item_id}** — \"{title}\"\n"
         f"- kind: `{kind}`\n"
         f"- phase: `{phase}`\n"
-        f"- materials: `{item_dir}/`",
+        f"- materials: `{item_dir}/`"
+        + (f"\n- anchor docs: `{anchor_dir}/` — `Read` them there; they are outside the repo and "
+           f"outside your item folder, and nothing you do to them is committed or merged"
+           if anchor_dir else ""),
         f"\n{presence}",
         "Every claim you make about this item must trace to a file you read — if you cannot name "
         "the file, you have not read it.",

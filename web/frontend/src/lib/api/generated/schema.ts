@@ -2728,10 +2728,8 @@ export interface components {
         };
         /**
          * AuthorizationRequest
-         * @description A contract change a work-item could not self-authorize, awaiting the owner's grant or deny at
-         *     review.
-         *
-         *     `delegable` says whether the deputy COULD have granted it. The owner grants regardless.
+         * @description A change to what the project INTENDS that a work-item could not settle alone, awaiting the
+         *     owner's grant or deny at review. Every scope is owner-reserved.
          */
         AuthorizationRequest: {
             /** Id */
@@ -2744,8 +2742,6 @@ export interface components {
             doc: string;
             /** Scope */
             scope: string;
-            /** Delegable */
-            delegable: boolean;
         };
         /** AuthorizeBody */
         AuthorizeBody: {
