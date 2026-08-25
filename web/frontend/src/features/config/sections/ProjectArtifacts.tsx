@@ -259,7 +259,7 @@ function AssetModal({ asset, onClose }: { asset: AssetItem; onClose: () => void 
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {asset.description && <p className="mb-3 text-[12px] italic leading-relaxed text-faint">{asset.description}</p>}
-        <Markdown text={asset.body} variant="doc" />
+        <Markdown text={asset.body} variant="doc" tone="universal" />
       </div>
     </Modal>
   )

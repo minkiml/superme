@@ -90,7 +90,7 @@ export default function ConstitutionModal({
         ) : (
           <>
             {description && <p className="mb-3 text-[12px] italic leading-relaxed text-faint">{description}</p>}
-            <Markdown text={display} variant="doc" />
+            <Markdown text={display} variant="doc" tone={tint} />
           </>
         )}
       </div>

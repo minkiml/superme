@@ -269,7 +269,7 @@ export function ProposalModal({
               )}
               <PSection title="Body">
                 <div className="text-[13px] text-fg">
-                  <Markdown text={cur.body} />
+                  <Markdown text={cur.body} tone="dev" />
                 </div>
               </PSection>
               {fields && Object.keys(fields).length > 0 && (

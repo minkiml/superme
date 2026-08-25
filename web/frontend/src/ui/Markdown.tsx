@@ -144,12 +144,13 @@ export default function Markdown({
 }: {
   text: string
   variant?: 'chat' | 'doc' | 'report'
-  tone?: 'universal' | 'dev' | 'core'
+  /** Required: an untinted render silently drops the code and bold hues. */
+  tone: 'universal' | 'dev' | 'core'
   onInternalLink?: (slug: string) => void
 }) {
   // Bold is rare in a preview and marks the one thing that matters; a report is bold-labelled top
   // to bottom.
-  const tint = tone ? ' ' + TONE[tone] + (variant === 'report' ? '' : ' ' + BOLD_TINT) : ''
+  const tint = ' ' + TONE[tone] + (variant === 'report' ? '' : ' ' + BOLD_TINT)
   // A comment is a comment: printed as a paragraph, an authoring note reads as instruction to
   // whoever opens the doc.
   const body = useMemo(() => openBlocks(text.replace(/[ \t]*<!--[\s\S]*?-->\n?/g, '')), [text])

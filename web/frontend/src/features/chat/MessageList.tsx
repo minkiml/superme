@@ -25,7 +25,7 @@ const TALKER: Record<string, { icon: LucideIcon; label: string; right: boolean; 
   },
 }
 
-function Row({ m, tone }: { m: Msg; tone?: 'dev' | 'core' }) {
+function Row({ m, tone }: { m: Msg; tone: 'dev' | 'core' }) {
   // A system notice is not a talker: the shape itself is what keeps it from reading as the agent.
   if (m.role === 'system') {
     return (
@@ -84,7 +84,7 @@ export default function MessageList({
   ctxLabel: string
   onAnswer: (approved: boolean) => void
   onLoadMore?: () => void // reveal the next page of older bubbles ("See more")
-  tone?: 'dev' | 'core' // colours assistant `code` by scope + **bold** consistently, matching the doc previews
+  tone: 'dev' | 'core' // colours assistant `code` by scope + **bold** consistently, matching the doc previews
 }) {
   // N3 — stick to the bottom only while the owner is reading it; "See more" prepends without a jump.
   const { scrollRef, onScroll, preserve } = useStickyScroll([messages, live, statusLabel, approval])
