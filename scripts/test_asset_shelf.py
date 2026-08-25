@@ -120,17 +120,19 @@ def test_ranking_never_proposes_what_cannot_be_adopted():
         shutil.rmtree(d, ignore_errors=True)
 
 
-def test_the_three_standards_ship_and_the_hub_holds_them():
+def test_the_three_standards_ship_and_only_the_hub_may_take_them():
+    """Adoption is not asserted: `.assets` is per-machine curation, tracked nowhere."""
     names = {"skill-authoring", "tool-authoring", "comment-style"}
     pool = {it["slug"]: it for it in ops.read_asset_pool()}
     ok("all three standards are on the shelf", names <= set(pool))
     ok("…each restricted to the engine", all(pool[n]["hub_only"] for n in names))
-    ok("…and adopted by it", names <= ops.list_repo_assets(HUB_HOME))
     ok("…and offered to it", names <= slugs(HUB_HOME, None))
     ok("no other project may take them", not (names & slugs(GUEST_HOME, None)))
 
 
 def test_wiring():
+    ok("a cell's adopted list is that machine's own, never the repo's",
+       "constitution/.assets" in src(".gitignore"))
     ok("the shelf has a contract gate", Path("scripts/asset_contract.py").is_file())
     ok("…that the fast gate runs", "scripts.asset_contract" in src("scripts/check_fast.sh"))
     gate = src("scripts/skill_contract.py")
@@ -157,7 +159,7 @@ def main() -> None:
     test_withdrawal_reaches_every_repo()
     test_a_muted_item_keeps_its_adoption_record()
     test_ranking_never_proposes_what_cannot_be_adopted()
-    test_the_three_standards_ship_and_the_hub_holds_them()
+    test_the_three_standards_ship_and_only_the_hub_may_take_them()
     test_wiring()
     print(f"\nALL GREEN — {PASS} checks passed (self-cleaned).")
 

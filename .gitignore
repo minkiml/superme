@@ -28,6 +28,8 @@ superme_agent/local-harness/*
 !superme_agent/local-harness/asset/
 !superme_agent/local-harness/global/
 !superme_agent/local-harness/README.md
+# Which assets a cell has adopted is that machine's curation, and the runtime rewrites it.
+superme_agent/local-harness/*/*/constitution/.assets
 
 # Per-worktree vet-environment state, written by the vet skill's boot script.
 .vet-env.json
