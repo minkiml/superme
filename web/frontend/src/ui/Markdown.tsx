@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { langForFence, highlight } from '@/lib/highlight'
 
 // Render markdown with Tailwind arbitrary-variant styling — no global CSS, no typography plugin.
 //
@@ -101,15 +102,24 @@ function internalSlug(href: string | undefined): string | null {
   return m[1].toLowerCase() === 'readme' ? 'overview' : m[1]
 }
 
-// Only CODE spans take the scope hue. Literal class strings, so the JIT picks them up, and placed
-// after the base so they win.
+// Only INLINE code takes the scope hue — it names a thing in prose. A fenced block is a program
+// and gets syntax colours instead. Literal class strings, so the JIT picks them up.
 const TONE: Record<string, string> = {
-  universal: '[&_code]:text-universal [&_pre_code]:text-universal',
-  dev: '[&_code]:text-dev [&_pre_code]:text-dev',
-  core: '[&_code]:text-core [&_pre_code]:text-core',
+  universal: '[&_code]:text-universal [&_pre_code]:text-fg',
+  dev: '[&_code]:text-dev [&_pre_code]:text-fg',
+  core: '[&_code]:text-core [&_pre_code]:text-fg',
 }
 // Bold takes one consistent colour across every tinted preview, so emphasis reads uniformly.
 const BOLD_TINT = '[&_strong]:text-warn'
+
+// A fence's children arrive as a string or an array of them. Joining with `String()` would splice
+// a comma between the parts.
+function textOf(node: ReactNode): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join('')
+  return ''
+}
 
 // Markdown needs a BLANK LINE to end a block; without one a paragraph under a table parses as
 // another row.
@@ -159,6 +169,18 @@ export default function Markdown({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Only a fence that NAMES a language is highlighted: auto-detection paints ASCII trees
+          // and shell transcripts as code that means something.
+          code({ className, children, ...props }) {
+            const lang = langForFence(/language-(\w+)/.exec(className || '')?.[1])
+            if (!lang) return <code className={className} {...props}>{children}</code>
+            return (
+              <code
+                className={`${className} hljs`}
+                dangerouslySetInnerHTML={{ __html: highlight(textOf(children).replace(/\n$/, ''), lang) }}
+              />
+            )
+          },
           a({ href, children, ...props }) {
             const slug = internalSlug(href)
             if (slug && onInternalLink) {

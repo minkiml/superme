@@ -1,69 +1,7 @@
-// Unified patch to structured hunks, plus per-line syntax highlighting.
+// A unified patch parsed into structured hunks.
 //
 // PARSE here, RENDER in the component: parsing is a pure function over text, which is the only
 // reason it is testable without a browser.
-
-import hljs from 'highlight.js/lib/core'
-import javascript from 'highlight.js/lib/languages/javascript'
-import typescript from 'highlight.js/lib/languages/typescript'
-import python from 'highlight.js/lib/languages/python'
-import bash from 'highlight.js/lib/languages/bash'
-import json from 'highlight.js/lib/languages/json'
-import yaml from 'highlight.js/lib/languages/yaml'
-import markdown from 'highlight.js/lib/languages/markdown'
-import css from 'highlight.js/lib/languages/css'
-import xml from 'highlight.js/lib/languages/xml'
-import sql from 'highlight.js/lib/languages/sql'
-import go from 'highlight.js/lib/languages/go'
-import rust from 'highlight.js/lib/languages/rust'
-
-// Registered explicitly: the all-languages build is a megabyte of grammars no diff here will
-// contain.
-const LANGS: Record<string, unknown> = {
-  javascript, typescript, python, bash, json, yaml, markdown, css, xml, sql, go, rust,
-}
-for (const [name, def] of Object.entries(LANGS)) {
-  hljs.registerLanguage(name, def as never)
-}
-
-const EXT_LANG: Record<string, string> = {
-  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript',
-  py: 'python', pyi: 'python',
-  sh: 'bash', bash: 'bash', zsh: 'bash',
-  json: 'json', yml: 'yaml', yaml: 'yaml',
-  md: 'markdown', markdown: 'markdown',
-  css: 'css', scss: 'css',
-  html: 'xml', xml: 'xml', svg: 'xml',
-  sql: 'sql', go: 'go', rs: 'rust',
-}
-
-/** The highlight.js language for a path, or null when we have no grammar for it. */
-export function langFor(path: string): string | null {
-  const ext = path.split('.').pop()?.toLowerCase() ?? ''
-  const lang = EXT_LANG[ext]
-  return lang && hljs.getLanguage(lang) ? lang : null
-}
-
-/**
- * Per LINE, not per file: a diff is two interleaved programs, and a highlighter fed that as one
- * unit loses its place.
- *
- * The trade is missing multi-line constructs, which beats colouring the rest of a file wrong.
- */
-export function highlight(line: string, lang: string | null): string {
-  if (!line) return ''
-  if (!lang) return escapeHtml(line)
-  try {
-    return hljs.highlight(line, { language: lang, ignoreIllegals: true }).value
-  } catch {
-    return escapeHtml(line)
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'))
-}
 
 export type Row = {
   kind: 'add' | 'del' | 'ctx'

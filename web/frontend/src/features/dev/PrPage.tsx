@@ -4,9 +4,10 @@ import {
   ChevronsUpDown,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
-import {
-  parsePatch, foldContext, pairRows, highlight, langFor, type Row,
-} from './diff'
+import { parsePatch, foldContext, pairRows, type Row } from './diff'
+// Per LINE, not per file: a diff is two interleaved programs, and a highlighter fed that as one
+// unit loses its place. The trade is missing multi-line constructs.
+import { highlight, langFor } from '@/lib/highlight'
 import {
   getWorkItemPr, getWorkItemPrDiff, advanceWorkItem,
   type PrView, type PrDiff,
