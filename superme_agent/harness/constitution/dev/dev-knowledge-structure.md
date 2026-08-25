@@ -84,8 +84,8 @@ work-items/<id>/
 Read fields from frontmatter, never prose; `parent_id`/`root_id` derive from the path.
 
 ```yaml
-id: 1.5k              # = folder name
-root_id: 1.5k         # top of this branch-off tree
+id: 4f3a9c2b1e7d      # = folder name (kernel-minted, 12 hex)
+root_id: 4f3a9c2b1e7d # top of this branch-off tree
 parent_id: null       # null = a root; set = a branch-off
 wave: null            # (root only) the wave this item instances → resolves its deliverable
 deliverable: null     # …or a deliverable directly when no wave applies
