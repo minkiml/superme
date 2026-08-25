@@ -191,7 +191,7 @@ export default function WorkItemModal({
     }
   }
 
-  // A grant routes the item back into build to perform it; a deny waives the check, gap on record.
+  // A grant is performed by close after the merge; a deny waives the check, gap on record.
   async function decideAuth(authId: string, decision: 'granted' | 'denied') {
     setAuthBusy(authId)
     try {

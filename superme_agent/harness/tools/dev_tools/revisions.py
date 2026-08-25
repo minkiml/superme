@@ -1,7 +1,7 @@
 """Typed edits to a durable record: the knowledge delta, and a plan revision."""
 
 import json
-from typing import Annotated, Literal, Required, TypedDict
+from typing import Annotated, Literal, NotRequired, Required, TypedDict
 
 from .render import _err, _ok, _s
 from .items import _bound_err, _item_dir
@@ -18,6 +18,9 @@ class KnowledgeOpArg(TypedDict):
     content: Annotated[str, (((((("for body ops, the section body markdown only, without repeating "
                                   "the `## heading`. For `rename_section`, the new heading text on "
                                   "one line, without `##`"))))))]
+    expect: NotRequired[Annotated[str, ((((("required for `update` and `supersede`: the section's "
+                                            "body exactly as you just read it. Whitespace is "
+                                            "ignored; a mismatch refuses the whole call")))))]]
 
 
 class ApplyKnowledgeEditsArgs(TypedDict, total=False):

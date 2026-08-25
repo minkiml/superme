@@ -936,12 +936,11 @@ def test_contracts() -> None:
        and "change nothing: no sync, no commit, no merge" in flat)
     ok("...and it fixes nothing — no code, no plan edit, in the run OR later in the session",
        "no code, no plan edit, here or later in this session" in flat)
-    # Exemplars where they teach a judgment, marked AS examples so they read as illustration.
-    ok("the sync-vs-authorization judgment carries a LABELLED example",
-       "Two changes on one item can need two different calls" in flat
-       and "`request_authorization` — it changes what the project promised" in flat)
-    ok("...with the boundary stated, not just the two cases",
-       "The tell is not which doc you touch" in flat)
+    # Review NAMES the doc debt; it never asks permission for it, and holds no tool that could.
+    ok("review reports what the docs will owe rather than requesting it",
+       "Name it; never ask permission for it" in flat
+       and "request_authorization" not in flat)
+    ok("...and the naming carries a LABELLED example", "**Good example**" in flat)
     # The owner's report is KIND-NEUTRAL: the questions a person asks before approving do not
     # change with the workflow.
     ok("...and one owner report template serves every kind, with no second review skill",

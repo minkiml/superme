@@ -41,16 +41,13 @@ class PagedNotice(BaseModel):
 
 
 class AuthorizationRequest(BaseModel):
-    """A contract change a work-item could not self-authorize, awaiting the owner's grant or deny at
-    review.
-
-    `delegable` says whether the deputy COULD have granted it. The owner grants regardless."""
+    """A change to what the project INTENDS that a work-item could not settle alone, awaiting the
+    owner's grant or deny at review. Every scope is owner-reserved."""
     id: str
     what: str
     why: str
     doc: str
     scope: str
-    delegable: bool
 
 
 class DrilldownAction(BaseModel):

@@ -681,14 +681,10 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
         "You may NOT drop, abandon, or supersede work — you have no such move, by design. Ending "
         "work is the owner's alone.\n\n"
 
-        "**Authorization requests (review only).** The build may have DEFERRED a contract change it "
-        "couldn't self-authorize; the pending requests are listed in your brief, each tagged "
-        "delegated or owner-reserved. For a **delegated** one, you MAY grant it: emit `send_back` "
-        "with `authorize: <request-id>` — the kernel records the grant and routes it back to build "
-        "to apply. For an **owner-reserved** one, you may NOT grant it — **escalate**, however "
-        "obviously right the change seems. The grant is a send_back variant, not a new power: the "
-        "kernel refuses (and escalates) any grant whose scope the owner hasn't delegated to you, so "
-        "don't try to grant around the floor.\n\n"
+        "**Authorization requests (review only).** The build may have DEFERRED a change to what "
+        "the project INTENDS; the pending requests are listed in your brief. You may NOT grant "
+        "one, however obviously right it looks — **escalate**. Every scope is the owner's alone, "
+        "and there is no verdict field that grants one.\n\n"
         
         "### Procedure\n"
         "1. Read the decision log, then the mandate, then the gate brief — orient before you judge.\n"
@@ -785,19 +781,15 @@ _DEPUTY_LOG_CAP = 2_000
 _DEPUTY_REPORT_CAP = 12_000
 
 
-def render_authorizations_block(pending: list[dict], delegated: list[str]) -> str:
-    """The review deputy's authorization surface. `[delegated]` means the
-    owner delegated that scope; `[owner-reserved]` means escalate."""
+def render_authorizations_block(pending: list[dict]) -> str:
+    """The review deputy's authorization surface — every one of them escalates."""
     if not pending:
         return ""
-    dset = set(delegated or [])
-    lines = ["The build DEFERRED these contract changes it couldn't self-authorize. For each, "
-             "**grant it if its scope is delegated to you** (verdict `send_back` with "
-             "`authorize: <id>` — it routes back to build to apply); **escalate an owner-reserved "
-             "one** (only the owner may grant it):", ""]
+    lines = ["The build DEFERRED these changes to what the project INTENDS. You cannot grant one: "
+             "**escalate**, and name them in your escalation so the owner grants or denies each:",
+             ""]
     for a in pending:
-        tag = "[delegated — you may grant]" if a.get("scope") in dset else "[owner-reserved — escalate]"
-        lines.append(f"- `{a['id']}` {tag} — scope `{a.get('scope')}` · doc `{a.get('doc') or '?'}` · "
+        lines.append(f"- `{a['id']}` — scope `{a.get('scope')}` · doc `{a.get('doc') or '?'}` · "
                      f"blocks check `{a.get('check') or '?'}`\n    what: {a.get('what')}\n"
                      f"    why: {a.get('why')}")
     return "\n".join(lines)

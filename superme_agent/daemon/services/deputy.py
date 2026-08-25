@@ -175,16 +175,14 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     # ground truth.
     delta = _build_delta(item_dir, gate, state.get("numbers") or {})
     signal = _success_signal(dev_root, item) if gate == "review" else None
-    # At review, surface the pending requests and which scopes are delegated, so the deputy can
-    # grant or escalate.
+    # At review, surface the pending requests: the deputy cannot grant one, so it escalates.
     from ...core import artifacts as _arts
     auth_block = None
     verdicts = None
     if gate == "review":
         pending = _arts.pending_authorizations(item_dir)
         if pending:
-            auth_block = kernel_speech.render_authorizations_block(
-                pending, _spine.get_deputy_delegated_authority())
+            auth_block = kernel_speech.render_authorizations_block(pending)
         # The vet's actual per-check verdicts — the brief alone carries only an entry count.
         verdicts = _arts.verdict_rows(item_dir)
     # The deputy reads the OWNER's document for this phase, not a re-flattening of it.
@@ -273,70 +271,15 @@ def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict
     # then fails.
     try:
         deputy_core.append_decision(dev_root / "work-items" / item_id, gate, decision, because,
-                                    change=verdict.get("change"), authorize=verdict.get("authorize"))
+                                    change=verdict.get("change"))
     except Exception:
         log.exception("deputy decision-log append failed for %s", item_id)
     if decision == "approve":
         _do_approve(ctx, context_id, item_id, gate, verdict)
     elif decision == "send_back":
-        # A send_back carrying `authorize` is a GRANT of a delegated authorization, never a new
-        # ratify power.
-        if (verdict.get("authorize") or "").strip():
-            _do_grant(ctx, context_id, item_id, gate, verdict)
-        else:
-            _do_send_back(ctx, context_id, item_id, gate, verdict)
+        _do_send_back(ctx, context_id, item_id, gate, verdict)
     else:  # escalate
         _do_escalate(ctx, context_id, item_id, gate, verdict, reason="deputy_escalated")
-
-
-def _do_grant(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:
-    """Grant a DELEGATED authorization the deputy judged ready.
-
-    The floor is mechanical: only a scope in the owner's delegated set, otherwise escalate."""
-    from ...core import artifacts as _arts
-    from . import loop as _loop
-    dev_root = ctx.internal_root / "dev"
-    item_dir = dev_root / "work-items" / item_id
-    auth_id = (verdict.get("authorize") or "").strip()
-    auth = next((a for a in _arts.pending_authorizations(item_dir) if a["id"] == auth_id), None)
-    if auth is None:
-        _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_unknown",
-                     override=(f"The deputy tried to grant authorization {auth_id!r}, but no such "
-                               f"pending request exists on this item — over to you."))
-        return
-    if auth.get("scope") not in _spine.get_deputy_delegated_authority():
-        _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_reserved",
-                     override=(f"The deputy judged this ready, but the change needs an authorization "
-                               f"it cannot give — scope `{auth.get('scope')}` is owner-reserved. "
-                               f"Request: {auth.get('what')}. Grant or deny it yourself."))
-        return
-    # Re-check the declared scope against the staged ops: they can be restaged after the tool's
-    # own check.
-    try:
-        from ...core import knowledge_delta as _kd
-        staged = (_kd.read_delta(item_dir) or {}).get("ops") or []
-    except Exception:
-        staged = []
-    if (mismatch := _arts.scope_mismatch(str(auth.get("scope") or ""), staged)):
-        _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_scope_mismatch",
-                     override=(f"The deputy tried to grant '{auth.get('what')}' as a delegated "
-                               f"sync, but the staged ops change what the project IS — {mismatch} "
-                               f"This is yours to grant or deny."))
-        return
-    recorded, why = _loop.grant_authorization(ctx, context_id, item_id, auth_id, by="deputy")
-    if not recorded:
-        _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_undeliverable",
-                     override=(f"The deputy granted authorization for '{auth.get('what')}' but the "
-                               f"grant could not be recorded: {why}"))
-        return
-    _dev_store.log_event(context_id, "deputy.approve",
-                         f"Deputy granted a delegated authorization at {gate}: "
-                         f"{(auth.get('what') or '')[:140]}",
-                         item_id=item_id, actor="deputy",
-                         meta={"gate": gate, "auth_id": auth_id, "scope": auth.get("scope"),
-                               "speech": f"I granted a delegated authorization "
-                                         f"('{auth.get('what')}') and sent it back to build to apply "
-                                         f"— this is a scope you delegated to me."})
 
 
 def _do_approve(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:

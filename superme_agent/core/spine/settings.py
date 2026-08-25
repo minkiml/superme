@@ -43,32 +43,6 @@ class SettingsOps:
             pass
         return self.get_loop_budget()
 
-    # --- delegated deputy authority ---
-
-    # The deputy may authorize changes that SYNC the contract to reality; the owner reserves
-    # changes that DEFINE intent.
-    DEFAULT_DELEGATED_AUTHORITY = ("doc-sync", "rename-to-shipped", "roadmap-mark-done")
-
-    def get_deputy_delegated_authority(self) -> list[str]:
-        """The scopes the deputy may grant unaided (default = the sync-to-reality set)."""
-        with self._conn() as c:
-            r = c.execute("SELECT value FROM system_setting "
-                          "WHERE key='deputy_delegated_authority'").fetchone()
-        if r is None or r["value"] is None:
-            return list(self.DEFAULT_DELEGATED_AUTHORITY)
-        return [s.strip() for s in str(r["value"]).split(",") if s.strip()]
-
-    def set_deputy_delegated_authority(self, scopes: list[str]) -> None:
-        """Set the delegated scope set (per-system). An empty list means the deputy grants nothing —
-        every authorization escalates to the owner."""
-        with self._conn() as c:
-            c.execute(
-                "INSERT INTO system_setting (key,value,updated_at) "
-                "VALUES ('deputy_delegated_authority',?,?)"
-                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
-                (",".join(s.strip() for s in scopes if s.strip()), _now()),
-            )
-
     # --- learning master switch --------------------------------------------------
     def get_learning_enabled(self) -> bool:
         """Whether capture sweeps may fire. Default OFF — background learning spends

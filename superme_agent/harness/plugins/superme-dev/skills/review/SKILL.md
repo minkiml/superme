@@ -1,6 +1,6 @@
 ---
 name: review
-description: Write the report the owner decides on at a work-item's review gate, and stage any anchor-doc update the work earned. Use when a work-item enters its review phase; not for running the checks (vet does that), not for changing the plan (only a revise routes it back), not for merging (the owner's gate).
+description: Write the report the owner decides on at a work-item's review gate, and name what the anchor docs will owe once it lands. Use when a work-item enters its review phase; not for running the checks (vet does that), not for changing the plan (only a revise routes it back), not for merging (the owner's gate).
 argument-hint: "[work-item-id]"
 category: workspace
 ---
@@ -12,8 +12,8 @@ is DATA — read it, never re-run it. Approving what you write locks this item's
 the artifacts don't carry is the one failure this phase cannot recover from.
 
 **Read-only on the tree.** Inspect git freely (shell via `Bash`), change nothing: no sync, no
-commit, no merge. Your only writes are `artifacts/review.md`, `reports/report-review.md`, and the
-staged knowledge delta.
+commit, no merge. You write exactly two files, `artifacts/review.md` and
+`reports/report-review.md`, and nothing else.
 
 **You write TWO documents, in this order, for two different readers.**
 
@@ -55,16 +55,18 @@ decisions / roadmap / resources)? Say so in the report, doc by doc, one line eac
 writes them after the merge locks the code, and it reads this. Nothing doc-worthy changed → say that
 too; silence reads as an oversight.
 
-An op that DEFINES or ALTERS intent is not a sync — re-scoping a deliverable, changing a written
-success signal, setting direction. Those go through `request_authorization`, naming the ops they
-cover. Two changes on one item can need two different calls:
+**Name it; never ask permission for it.** A doc edit is not a decision anyone still owes an answer
+on — approving this item IS the decision, and the owner makes it at this gate. That holds for a line
+that changes what a deliverable PROMISED just as much as for one that records what shipped. Give
+that line its own sentence under `What you're approving`, so the owner approves the promise and the
+merge together.
 
-| the change | the call |
-|---|---|
-| `architecture.md` — record that the CSV writer moved into `reporting/` | name it here; close writes it — it describes what now exists |
-| `project-prd.md` — drop `--csv` from deliverable `d-reporting` and rewrite its success signal | `request_authorization` — it changes what the project promised |
-
-The tell is not which doc you touch — it is whether the line you change DEFINES what was promised.
+**Good example**
+```example
+✓ `project-prd` § Deliverables — `d-reporting` no longer promises CSV, only the one format
+✓ `architecture` § Components — the writer moved out of the CLI layer
+✓ nothing else — no other doc describes what this touched
+```
 
 **A research item skips this step:** nothing it concluded has been implemented, so no anchor doc
 owes it anything. Its proposals in step 3 are how its findings become work.

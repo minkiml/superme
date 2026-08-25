@@ -62,9 +62,28 @@ def test_delta_validation(tmp: Path) -> None:
     _seed_anchor_docs(dev_root)
     repo = _git_repo(tmp, "kd-repo")
 
-    good = [{"doc": "architecture", "section": "Components", "op": "update",
+    live = KD._section_body((dev_root / "general" / "architecture.md").read_text(encoding="utf-8"),
+                            "Components")
+    good = [{"doc": "architecture", "section": "Components", "op": "update", "expect": live,
              "content": "New truth referencing `real.py` under d-alpha."}]
     ok("valid ops pass", KD.validate_ops(good, dev_root, repo) == [])
+
+    # A body-replacing op carries the text it replaces, so a section that moved refuses.
+    no_expect = [dict(good[0])]; no_expect[0].pop("expect")
+    ok("update without `expect` is refused",
+       any("needs `expect`" in i for i in KD.validate_ops(no_expect, dev_root, repo)))
+    stale = [dict(good[0], expect="what the section said before somebody else closed")]
+    ok("update whose `expect` no longer matches is refused, naming the reason",
+       any("MOVED since you read it" in i for i in KD.validate_ops(stale, dev_root, repo)))
+    ok("whitespace is layout, not content",
+       KD.validate_ops([dict(good[0], expect=f"  {live}\n\n  ")], dev_root, repo) == [])
+    ok("append needs no `expect` — it cannot overwrite anything",
+       KD.validate_ops([{"doc": "architecture", "section": "Components", "op": "append",
+                         "content": "another line about `real.py`"}], dev_root, repo) == [])
+    ok("two ops on ONE section are refused — the second would check against stale text",
+       any("edited twice" in i for i in KD.validate_ops(
+           [good[0], {"doc": "architecture", "section": "Components", "op": "append",
+                      "content": "and more"}], dev_root, repo)))
     cases = {
         "unknown doc": [{"doc": "nope", "section": "X", "op": "update", "content": "c"}],
         "missing section": [{"doc": "architecture", "section": "Ghost", "op": "update", "content": "c"}],

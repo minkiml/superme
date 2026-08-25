@@ -37,9 +37,7 @@ export function AuthorizationsPane({ auths, busy, onDecide }: {
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
             {a.doc && <span>doc: <code className="text-muted">{a.doc}</code></span>}
             <span>scope: <code className="text-muted">{a.scope}</code></span>
-            <span className={a.delegable ? 'text-muted' : 'font-medium text-warn'}>
-              {a.delegable ? 'sync-to-reality' : 'owner-reserved — escalated to you'}
-            </span>
+            <span className="font-medium text-warn">owner-reserved</span>
           </div>
           <div className="mt-2.5 flex items-center gap-2">
             <button onClick={() => onDecide(a.id, 'granted')} disabled={!!busy}

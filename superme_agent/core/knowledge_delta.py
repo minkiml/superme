@@ -15,7 +15,8 @@ from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, parse_deliverables
 
 # The first three act on a section's BODY; rename_section rewrites the `## <heading>` LINE.
 OPS = ("update", "append", "supersede", "rename_section")
-_BODY_OPS = ("update", "append", "supersede")
+# These two REPLACE a body, so each carries the text it expects to be replacing.
+_REPLACING_OPS = ("update", "supersede")
 _DOCS = (*ANCHOR_DOCS, "resources")
 
 # Backticks only, deliberately: a prose mention is not a claim worth ground-truth checking.
@@ -35,6 +36,17 @@ def _sections(text: str) -> list[str]:
     return re.findall(r"(?m)^##\s+(.+?)\s*$", text)
 
 
+def _section_body(text: str, section: str) -> str | None:
+    """The body under `## <section>`, or None when the heading is absent."""
+    m = re.search(rf"(?ms)^##\s+{re.escape(section)}\s*\n(.*?)(?=^##\s|\Z)", text)
+    return m.group(1) if m else None
+
+
+def _same(a: str, b: str) -> bool:
+    """Two section bodies read as the same text. Whitespace is layout, not content."""
+    return " ".join((a or "").split()) == " ".join((b or "").split())
+
+
 def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
     """Itemized validation issues for a list of edit ops; empty means valid. v1 never invents structure."""
     if not isinstance(ops, list) or not ops:
@@ -43,6 +55,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
     prd_slugs = {d.get("id") for d in
                  parse_deliverables(dev.read_general_doc(dev_root, "project-prd") or "")}
     issues: list[str] = []
+    seen: set[tuple[str, str]] = set()
     for i, op in enumerate(ops, 1):
         tag = f"op {i}"
         if not isinstance(op, dict):
@@ -50,6 +63,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
             continue
         doc, section = str(op.get("doc") or ""), str(op.get("section") or "")
         kind, content = str(op.get("op") or ""), str(op.get("content") or "")
+        replaces = kind in _REPLACING_OPS
         if kind not in OPS:
             issues.append(f"{tag}: op must be one of {'/'.join(OPS)} (got {kind!r})")
         p = _doc_path(dev_root, doc)
@@ -64,6 +78,25 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         elif section not in _sections(p.read_text(encoding="utf-8")):
             issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
                           f"{', '.join(_sections(p.read_text(encoding='utf-8'))) or '(none)'}")
+        # Ops read the doc on disk, so a second op on one section reads pre-first-op text.
+        elif (doc, section) in seen:
+            issues.append(f"{tag}: {doc} § {section} is edited twice in this call — one op per "
+                          f"section, carrying the whole body you want it to end with")
+        # Two closes from one project state both replace this body; the later would silently
+        # drop the other's write.
+        elif replaces:
+            live = _section_body(p.read_text(encoding="utf-8"), section) or ""
+            if "expect" not in op:
+                issues.append(f"{tag}: {kind} needs `expect` — the section body you composed "
+                              f"against, so a section that moved under you refuses instead of "
+                              f"overwriting. Read {doc} § {section} and pass what is there")
+            elif not _same(str(op.get("expect") or ""), live):
+                head = " ".join(live.split())[:180]
+                issues.append(f"{tag}: {doc} § {section} MOVED since you read it — another item "
+                              f"closed into it. Nothing was written. Re-read the section, fold "
+                              f"your change into what is there now, and re-apply with the new "
+                              f"`expect`. It currently starts: {head!r}")
+        seen.add((doc, section))
         if not content.strip():
             issues.append(f"{tag}: empty content")
         if FILL.search(content):

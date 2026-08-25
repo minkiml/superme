@@ -338,12 +338,10 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
     ok("DENY waives the walled check → the rest passes (gap on record)",
        ev2["status"] == "passed" and ev2.get("waived") == ["walled"])
 
-    # FLOOR (the delegation gate — the check _do_grant enforces before granting):
-    sp = SystemSpine(db_path=tmp / "auth.db")
-    delegated = sp.get_deputy_delegated_authority()
-    ok("a sync-to-reality scope is delegated (deputy may grant)", "doc-sync" in delegated)
-    ok("an intent-defining scope is owner-reserved (deputy must escalate)",
-       "doc-delete" not in delegated and "roadmap-scope" not in delegated)
+    # FLOOR: there is no delegated grant. Every scope reaches the owner.
+    ok("the deputy has no delegated authority to read",
+       not any(hasattr(SystemSpine, n) for n in
+               ("get_deputy_delegated_authority", "set_deputy_delegated_authority")))
 
 
 def _raises(fn) -> bool:
@@ -543,14 +541,6 @@ def test_spine_loop_settings(tmp: Path) -> None:
        and sp.effective_loop_budget("r", None) == 123_000)
     sp.set_loop_budget(None)
     ok("clearing returns the default", sp.get_loop_budget() == 500_000)
-    # Delegated deputy authority — default = the sync-to-reality set, settable per-system.
-    ok("delegated authority defaults to the sync-to-reality set",
-       sp.get_deputy_delegated_authority() == ["doc-sync", "rename-to-shipped", "roadmap-mark-done"])
-    sp.set_deputy_delegated_authority(["doc-sync"])
-    ok("delegated authority is narrowable", sp.get_deputy_delegated_authority() == ["doc-sync"])
-    sp.set_deputy_delegated_authority([])
-    ok("empty set → deputy grants nothing (all escalate)", sp.get_deputy_delegated_authority() == [])
-    sp.set_deputy_delegated_authority(list(sp.DEFAULT_DELEGATED_AUTHORITY))
     # The meter: build+vet rows count (live AND finished), other phases don't.
     rid = sp.start_item_run("r", mode="dev", feature="vet", item_id="i1", phase="vet")
     sp.set_item_run_tokens("r", "i1", tokens=111, ctx_pct=1)

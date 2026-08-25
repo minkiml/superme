@@ -262,29 +262,15 @@ def test_preamble_and_registration() -> None:
 
 
 def test_scope_vs_ops() -> None:
-    """The declared authorization scope is checked against the STAGED OPS.
-
-    The split is declared by the agent it constrains, so this is what makes the obvious lie
-    refusable."""
-    print("authorization scope vs staged ops")
+    """Every authorization scope is the owner's. Reconciling a doc to what shipped is not one."""
+    print("authorization scopes")
     from superme_agent.core import artifacts as A
-    intent = [{"doc": "project-prd", "section": "Deliverables", "op": "update", "content": "x"},
-              {"doc": "project-prd", "section": "Success signals", "op": "update", "content": "y"}]
-    sync = [{"doc": "architecture", "section": "Stack", "op": "update", "content": "z"}]
-    ok("intent-defining ops are detected", len(A.intent_ops(intent)) == 2)
-    ok("descriptive-doc ops are not", A.intent_ops(sync) == [])
-    ok("delegable scope + intent ops → refused, names the scope to use",
-       "roadmap-scope" in A.scope_mismatch("doc-sync", intent))
-    ok("delegable scope + sync ops → allowed", A.scope_mismatch("doc-sync", sync) == "")
-    ok("RESERVED scope passes through unchecked (it already reaches the owner)",
-       A.scope_mismatch("roadmap-scope", intent) == "")
-    ok("no staged ops → nothing to contradict", A.scope_mismatch("doc-sync", []) == "")
-    # The case that motivated it: a real behaviour change filed as `doc-sync` would have been
-    # granted.
-    ok("the 2026-07-27 mislabel would now be refused",
-       A.scope_mismatch("doc-sync", [{"doc": "project-prd", "section": "Deliverables",
-                                      "op": "update", "content": "drop --csv"}]) != "")
-
+    ok("only intent-changing scopes exist",
+       set(A.AUTH_SCOPES) == {"prd-identity", "roadmap-scope", "new-decision", "doc-delete"})
+    ok("the sync-to-reality scopes are gone — close writes those, asking nobody",
+       not {"doc-sync", "rename-to-shipped", "roadmap-mark-done"} & set(A.AUTH_SCOPES))
+    ok("nothing survives to split delegable from reserved",
+       not any(hasattr(A, n) for n in ("DELEGABLE_SCOPES", "intent_ops", "scope_mismatch")))
 
 
 def main() -> None:

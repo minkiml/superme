@@ -99,7 +99,7 @@ def pending_send_back(item_dir: Path) -> dict | None:
 
 
 def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
-                    change: str | None = None, authorize: str | None = None) -> None:
+                    change: str | None = None) -> None:
     """Append one deputy call, never rewritten. `decision` is validated so a typo cannot poison
     later counting."""
     if decision not in DEPUTY_DECISIONS:
@@ -109,8 +109,6 @@ def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
              "because": " ".join((because or "").split())}
     if change:
         entry["change"] = " ".join(change.split())
-    if authorize:
-        entry["authorize"] = authorize
     p = log_path(item_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:

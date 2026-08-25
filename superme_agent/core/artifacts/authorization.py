@@ -1,4 +1,4 @@
-"""Authorization requests: the scopes an agent may ask for, and the owner's answer."""
+"""Authorization requests: the intent changes an agent may not settle alone, and the owner's answer."""
 
 import re
 from datetime import datetime
@@ -8,64 +8,17 @@ from .text import atomic_write, _one_line
 
 # the authorization ledger
 
-# A work-item may PROPOSE a contract change, but changes that DEFINE intent are owner-reserved.
-# Build requests and DEFERS.
+# Every scope is owner-reserved. Reconciling a doc to what shipped is not a decision and never
+# comes through here.
 AUTH_SCOPES = (
-    # DELEGABLE by default — "sync the contract to shipped reality":
-    "doc-sync",           # reconcile a descriptive doc (architecture/capabilities/resources) to merged reality
-    "rename-to-shipped",  # rename doc references to match already-shipped code
-    "roadmap-mark-done",  # mark a roadmap item done that IS done
-    # RESERVED by default — "define or alter intent" (the floor holds; the deputy escalates):
     "prd-identity",       # project-prd identity / goals / deliverables
     "roadmap-scope",      # add / remove / re-scope a roadmap deliverable
     "new-decision",       # a decision that sets direction (incl. the public-contract naming choice)
     "doc-delete",         # delete / retire a doc
 )
 
-# The DEFAULT sync-to-reality set. The live delegated set is a per-system setting; this only
-# informs the review brief.
-DELEGABLE_SCOPES = ("doc-sync", "rename-to-shipped", "roadmap-mark-done")
-
 _AUTHORIZATION_FILE = "authorizations.md"
 _AUTHORIZATION_HEAD = re.compile(r"^### (?P<id>\S+) — (?P<what>.*)$")
-
-
-# Which STAGED OPS make a declared scope a lie: the split is declared by the agent it constrains.
-_INTENT_SECTIONS = {
-    "project-prd": ("deliverables", "success signals", "non-goals", "users", "problem"),
-    "roadmap":     ("wave", "deliverable"),
-}
-
-
-def intent_ops(ops: list) -> list[str]:
-    """The staged ops that DEFINE intent rather than record what shipped. Empty when nothing
-    intent-defining is staged."""
-    out: list[str] = []
-    for op in ops or []:
-        if not isinstance(op, dict):
-            continue
-        doc = str(op.get("doc") or "").strip().lower()
-        section = str(op.get("section") or "").strip().lower()
-        for marker in _INTENT_SECTIONS.get(doc, ()):
-            if marker in section:
-                out.append(f"{doc} § {op.get('section')}")
-                break
-    return out
-
-
-def scope_mismatch(scope: str, ops: list) -> str:
-    """'' when the declared scope matches the staged ops, else the refusal message. Only
-    DELEGABLE scopes are checked — a reserved one already goes to the owner."""
-    if scope not in DELEGABLE_SCOPES:
-        return ""
-    hits = intent_ops(ops)
-    if not hits:
-        return ""
-    return (f"scope {scope!r} is the delegable 'sync the docs to shipped reality' kind, but the "
-            f"staged ops change what the project IS: {', '.join(sorted(set(hits))[:3])}. That is "
-            f"an intent change — use `roadmap-scope` (add/remove/re-scope a deliverable), "
-            f"`prd-identity` (identity/goals) or `new-decision`. Those are owner-reserved: they "
-            f"reach the owner instead of a delegated deputy, which is the point.")
 
 
 def record_authorization(item_dir: Path, *, what: str, why: str, doc: str, scope: str,

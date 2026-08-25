@@ -29,8 +29,7 @@ from .proposals import (_PROPOSAL_FIELDS, _PROPOSAL_FIELD, RESERVED_REASONS, BEC
                         research_proposals, proposal_is_withheld, filed_and_withheld,
                         proposal_promotable, proposal_becomes_work, filed_and_settled,
                         research_proposal_issues)
-from .authorization import (AUTH_SCOPES, DELEGABLE_SCOPES, _AUTHORIZATION_FILE,
-                            _AUTHORIZATION_HEAD, _INTENT_SECTIONS, intent_ops, scope_mismatch,
+from .authorization import (AUTH_SCOPES, _AUTHORIZATION_FILE, _AUTHORIZATION_HEAD,
                             record_authorization, authorization_entries, pending_authorizations,
                             resolve_authorization)
 from .ledger import (BY_MACHINE, BY_AGENT, KIND_VERDICT, KIND_DIAGNOSIS, KIND_LENS,

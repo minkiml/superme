@@ -196,9 +196,6 @@ class VerdictMachine(TypedDict, total=False):
         ((((("`approve` = advance the phase · `send_back` = post your change into the work-item and "
              "route it back through build and vet · `escalate` = page the owner")))))]]
     gate: Required[Annotated[Literal["triage", "plan", "review"], "the gate you are judging"]]
-    authorize: Annotated[str, ((((("send_back only: the id of the delegated authorization request "
-                                   "you are granting. Scope is re-checked, and an undelegated grant "
-                                   "is refused")))))]
 
 
 def _lines(raw) -> list[str]:
@@ -256,8 +253,7 @@ class SubmitGateVerdictArgs(TypedDict, total=False):
 def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):
     """Validate and deliver the deputy's verdict, flattened to what the executor acts on.
 
-    Cross-field floor: `change` iff send_back, `escalation` iff escalate, `authorize` only with
-    send_back."""
+    Cross-field floor: `change` iff send_back, `escalation` iff escalate."""
     async def submit_gate_verdict(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}
@@ -278,17 +274,11 @@ def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):
                         "reads in the channel, so it must be a single sentence under 200. Say the "
                         "fact that decided it; move the rest into `checked`.")
         change = str(user.get("change") or "").strip()
-        authorize = str(machine.get("authorize") or "").strip()
         esc = user.get("escalation") or {}
-        if decision == "send_back":
-            if not change and not authorize:
-                return _err("send_back requires user.change — the one specific, actionable change "
-                            "(or machine.authorize when granting a delegated request).")
-        elif change:
+        if decision == "send_back" and not change:
+            return _err("send_back requires user.change — the one specific, actionable change.")
+        if change and decision != "send_back":
             return _err("user.change rides only with decision send_back.")
-        if authorize and decision != "send_back":
-            return _err("machine.authorize rides only with decision send_back (a grant is a "
-                        "send_back variant).")
         if decision == "escalate":
             if not str(esc.get("summary") or "").strip():
                 return _err("escalate requires user.escalation.summary — ONE plain line saying "
@@ -303,7 +293,7 @@ def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):
         if verdict_sink is not None:
             verdict_sink["verdict"] = {
                 "decision": decision, "gate": gate, "checked": checked, "because": because,
-                "change": change, "authorize": authorize, "escalation": escalation_text,
+                "change": change, "escalation": escalation_text,
             }
         return _ok("ok")
     return submit_gate_verdict

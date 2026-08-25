@@ -23,7 +23,9 @@ the owner could still act on the answer.
   item record. **A research item has none of these** — it has no plan phase, no build cycles and no
   merge. Read `artifacts/investigation.md` instead: the questions, what answered them, and what was
   left open.
-- **The anchor sections you are about to touch** — so you edit what is there, not what you remember.
+
+Do NOT read the anchor docs yet — step 2 reads each section immediately before it edits it, and a
+read taken now would be stale by then.
 
 `reports/report-review.md` is the owner's, not yours: it argues a decision they have already made.
 
@@ -34,13 +36,31 @@ anchor docs — which describe what is IN the main tree — owe it nothing; the 
 Its conclusions already live in its own report, and they reach the docs later through the work that
 acts on them. Go to step 3.
 
-`apply_knowledge_edits(item_id, ops)` — one call, all ops, validated then written. A refusal is
-itemized and writes nothing; fix the named op and call again.
+Work one section at a time, in this order. Do all of them before you call anything.
+
+1. **Test that the section is doc-worthy.** One question: does it now read as FALSE to someone who
+   has never heard of this item? Yes → it owes an edit. No → it owes nothing, and you write nothing.
+   A rename, a comment pass, an internal refactor and a test-only change all come out no.
+2. **Read the section as it stands right now**, from the anchor doc itself. Another item may have
+   closed into it while this one was in flight, so what is on disk is what you are editing — never
+   what `review.md` quoted and never what you remember.
+3. **Compose the whole body the section should END with**, folding your change into the step-2 text.
+   Keep every clause that is still true; a body that mentions only this item's work has deleted
+   somebody else's.
+4. **Pick the op.** `append` adds under what is there — the safe one, and right whenever the section
+   is a list that grows. `update` replaces the body · `supersede` replaces text a decision has
+   overtaken · `rename_section` fixes a stale heading.
+5. **`update` and `supersede` carry `expect`: the step-2 body, verbatim.** If the section moved
+   between your read and your call, the whole delta is refused and nothing is written — re-read it
+   and redo steps 3–5 against the new text.
+
+Then one call: `apply_knowledge_edits(item_id, ops)` — every op together, validated then written. A
+refusal is itemized and writes nothing; fix the named op and call again.
 
 - **Write what is TRUE OF MAIN NOW**, not what the item intended. A section you touch should read as
   if its reader has never heard of this work-item.
-- **One op per section.** `update` replaces a body · `append` adds to it · `supersede` replaces text
-  a decision has overtaken · `rename_section` fixes a stale heading.
+- **One op per section.** A second op on the same section is refused: put the whole intended body in
+  the first one.
 - **A granted authorization's ops are yours to apply** — the owner said yes at review, and this is
   where that becomes a doc change. A DENIED one leaves a known gap: skip it, and name it in step 3.
 - **Nothing doc-worthy? Call nothing.** A no-op close is a real outcome, and step 3 says so.

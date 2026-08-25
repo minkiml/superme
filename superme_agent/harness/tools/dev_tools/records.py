@@ -85,17 +85,16 @@ def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=
 
 class RequestAuthorizationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    what: Required[Annotated[str, "the contract change you can't self-authorize, one line "
-                                  "(e.g. 'retire the legacy spec.md doc')"]]
-    why: Required[Annotated[str, "one line: why it's needed and why it's above your pay grade"]]
+    what: Required[Annotated[str, ((((("the change to what the project intends, one line "
+                                       "(e.g. 'drop the export format from deliverable d-reporting')")))))]]
+    why: Required[Annotated[str, "one line: why the work cannot be finished as the plan promised"]]
     doc: Required[Annotated[str, "the anchor doc it touches (project-prd|architecture|capabilities|"
                                  "decisions|roadmap|resources|spec)"]]
     scope: Required[Annotated[
-        Literal["doc-sync", "rename-to-shipped", "roadmap-mark-done",
-                "prd-identity", "roadmap-scope", "new-decision", "doc-delete"],
-        ((((("matched against the deputy's delegated authority. Delegable: `doc-sync` · "
-             "`rename-to-shipped` · `roadmap-mark-done`. Owner-reserved: `prd-identity` · "
-             "`roadmap-scope` · `new-decision` · `doc-delete`")))))]]
+        Literal["prd-identity", "roadmap-scope", "new-decision", "doc-delete"],
+        ((((("which kind of intent change: `prd-identity` (identity/goals/deliverables) · "
+             "`roadmap-scope` (add/remove/re-scope a deliverable) · `new-decision` (sets "
+             "direction) · `doc-delete` (retire a doc). All four are the owner's alone")))))]]
     check: Annotated[str, ((((("the vet-plan check id this blocks, so that check defers instead of "
                                "failing")))))]
 
@@ -115,15 +114,6 @@ def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=No
             item = _DK().read_work_item(dev_root, item_id) or {}
         except Exception:
             pass
-        # Checked against the staged ops: a delegable claim over ops that change intent must not
-        # route past the owner.
-        try:
-            from ....core import knowledge_delta as _kd
-            staged = (_kd.read_delta(d) or {}).get("ops") or []
-        except Exception:
-            staged = []
-        if (mismatch := _arts.scope_mismatch(_s(args, "scope"), staged)):
-            return _err(f"Authorization refused — {mismatch}")
         try:
             a = _arts.record_authorization(
                 d, what=_s(args, "what"), why=_s(args, "why"), doc=_s(args, "doc"),
@@ -134,6 +124,6 @@ def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=No
         return _ok(f"Authorization requested: {a['what']} (scope {a['scope']}). The blocked vet "
                    f"check now DEFERS — do NOT edit the vet plan and do NOT force the change through. "
                    f"Complete everything else and report. The request rides to REVIEW, where the "
-                   f"owner (or a delegated deputy) grants or denies; a grant routes back to you to "
-                   f"perform it, a denial accepts the gap on the record.")
+                   f"OWNER grants or denies it; a grant is applied by close after the merge, a "
+                   f"denial accepts the gap on the record. Either way nothing routes back here.")
     return request_authorization

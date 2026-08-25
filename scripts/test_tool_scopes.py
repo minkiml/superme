@@ -47,8 +47,7 @@ EXPECTED: dict[str, set[str]] = {
               "create_inbox_item", "file_phase_report"},
     "vet": {"record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"},
-    "review": {"scaffold_artifact", "request_authorization", "file_phase_report",
-               "read_decisions"},
+    "review": {"scaffold_artifact", "file_phase_report", "read_decisions"},
     "close": {"apply_knowledge_edits", "read_verification_library", "create_inbox_item",
               "file_phase_report"},
     "investigate": {"scaffold_artifact", "write_checkpoint", "file_phase_report",
@@ -100,6 +99,7 @@ def test_invariants() -> None:
                         ("record_diagnosis", "vet"), ("record_lens", "vet"),
                         ("file_vet_report", "vet"), ("file_plan_report", "plan"),
                         ("revise_plan", "plan"), ("apply_knowledge_edits", "close"),
+                        ("request_authorization", "build"),
                         ("set_triage_classification", "triage")):
         holders = [s for s in PHASES if tool in names(s)]
         ok(f"{tool} belongs to {owner} alone", holders == [owner], str(holders))

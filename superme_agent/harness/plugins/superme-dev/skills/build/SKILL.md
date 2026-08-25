@@ -127,10 +127,12 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
 - **An unknown the plan didn't settle**, where your choice is expensive to reverse or changes what
   the owner receives → a `## Assumptions` entry in the cycle report (what · why · cost of being
   wrong). Skip trivia — twenty non-decisions bury the two that mattered.
-- **A contract change above your pay grade** (it DEFINES or alters intent: renaming or re-scoping a
-  deliverable, a direction-setting decision, deleting or editing a retired doc) →
-  `request_authorization` (what · why · doc · scope · the check it blocks). The blocked check DEFERS
-  and the request rides to review; a grant routes back to you, a denial accepts the gap.
+- **A change to what the project INTENDS** (renaming or re-scoping a deliverable, a
+  direction-setting decision, deleting or editing a retired doc) → `request_authorization`
+  (what · why · doc · scope · the check it blocks). The blocked check DEFERS and the request rides
+  to review, where the OWNER answers it — a grant is performed by close after the merge, a denial
+  accepts the gap. Nothing comes back to you either way, so finish and report.
+  Reconciling a doc to what you actually shipped is NOT this: close writes that, and asks nobody.
 - **Work that must be fixed first** → `create_inbox_item` with relation `blocking`; worth doing but
   not now → relation `spawn`. Never absorb out-of-scope work into this worktree. Pass
   `work_kind: "implementation"` — a branch-off from a build is code unless what you actually hit
