@@ -175,7 +175,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     # ground truth.
     delta = _build_delta(item_dir, gate, state.get("numbers") or {})
     signal = _success_signal(dev_root, item) if gate == "review" else None
-    # At review, surface the pending requests: the deputy cannot grant one, so it escalates.
+    # At review, surface pending requests. The deputy cannot grant one, so it escalates.
     from ...core import artifacts as _arts
     auth_block = None
     verdicts = None

@@ -260,8 +260,7 @@ def render_registry() -> dict[str, str]:
             "/k/dev/session-memory/sess-1.md"),
         "trigger.capture": KS.capture_trigger("SLICE"),
         "trigger.capture.steered": KS.capture_trigger("SLICE", "FOCUS"),
-        # `shell_cwd` mirrors the runner: build and vet stream with the worktree as cwd, review
-        # and close from the repo root. A fixture that omits it snapshots a prompt nobody sends.
+        # `shell_cwd` mirrors the runner. A fixture that omits it snapshots a prompt nobody sends.
         "preamble.work_item.build": KS.work_item_preamble("fix1", item, str(d), shell_cwd="/wt"),
         "preamble.work_item.build.bg": KS.work_item_preamble("fix1", item, str(d),
                                                              interactive=False, shell_cwd="/wt"),
@@ -269,7 +268,7 @@ def render_registry() -> dict[str, str]:
                                                         shell_cwd="/wt"),
         "preamble.work_item.review.repo_root": KS.work_item_preamble(
             "fix1", {**item, "phase": "review"}, str(d), interactive=False, shell_cwd="/repo"),
-        # Exactly what close.py sends: it is the one phase handed the anchor tree.
+        # Mirrors close.py, the one phase handed the anchor tree.
         "preamble.work_item.close": KS.work_item_preamble(
             "fix1", {**item, "phase": "close"}, str(d), interactive=False, shell_cwd="/repo",
             anchor_dir="/know/dev/general"),

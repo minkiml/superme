@@ -936,7 +936,7 @@ def test_contracts() -> None:
        and "change nothing: no sync, no commit, no merge" in flat)
     ok("...and it fixes nothing — no code, no plan edit, in the run OR later in the session",
        "no code, no plan edit, here or later in this session" in flat)
-    # Review NAMES the doc debt; it never asks permission for it, and holds no tool that could.
+    # Review names the doc debt and holds no tool that could ask permission.
     ok("review reports what the docs will owe rather than requesting it",
        "Name it; never ask permission for it" in flat
        and "request_authorization" not in flat)

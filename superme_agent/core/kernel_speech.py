@@ -351,14 +351,8 @@ def _shell_is_in(shell_cwd, worktree) -> bool:
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
                        compacted_checkpoint: str | None = None, shell_cwd=None,
                        anchor_dir=None) -> str:
-    """EVERY work-item-bound turn · per-turn. A THIN contract derived from
-    (kind, phase); the procedure lives in the skill.
-
-    `shell_cwd` is the cwd the caller will actually run the turn in. Only build and vet run inside
-    the worktree; told otherwise, a review reaches for `cd` and is refused.
-
-    `anchor_dir` is passed by the one phase that edits the anchor docs: it must read each section
-    before replacing it, and the tree is outside both the repo and the item folder."""
+    """The per-turn contract for a work-item turn. `shell_cwd` is the cwd it really runs in,
+    `anchor_dir` close's alone."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
@@ -427,8 +421,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     # construction at the permission layer.
     wt = item.get("git_worktree")
     in_wt = _shell_is_in(shell_cwd, wt)
-    # A shell that did not start in the worktree can still READ it, but only through a command
-    # that names it: `cd` is not a read-only verb, so the whole line is refused.
+    # A shell outside the worktree can still read it by naming it. `cd` is not a read-only verb.
     reach = ("" if in_wt else
              f" Your shell does NOT start there — it starts in `{shell_cwd}`. Reach the worktree "
              f"by naming it in the command (`git -C {wt} diff …`); a `cd` into it is refused.")
@@ -789,7 +782,7 @@ _DEPUTY_REPORT_CAP = 12_000
 
 
 def render_authorizations_block(pending: list[dict]) -> str:
-    """The review deputy's authorization surface — every one of them escalates."""
+    """The review deputy's authorization surface. Every one escalates."""
     if not pending:
         return ""
     lines = ["The build DEFERRED these changes to what the project INTENDS. You cannot grant one: "

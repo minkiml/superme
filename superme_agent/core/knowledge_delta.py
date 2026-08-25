@@ -15,7 +15,7 @@ from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, parse_deliverables
 
 # The first three act on a section's BODY; rename_section rewrites the `## <heading>` LINE.
 OPS = ("update", "append", "supersede", "rename_section")
-# These two REPLACE a body, so each carries the text it expects to be replacing.
+# These two replace a body, so each carries the text it expects to replace.
 _REPLACING_OPS = ("update", "supersede")
 _DOCS = (*ANCHOR_DOCS, "resources")
 
@@ -78,12 +78,11 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         elif section not in _sections(p.read_text(encoding="utf-8")):
             issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
                           f"{', '.join(_sections(p.read_text(encoding='utf-8'))) or '(none)'}")
-        # Ops read the doc on disk, so a second op on one section reads pre-first-op text.
+        # Ops read the doc on disk, so a second op on one section reads stale text.
         elif (doc, section) in seen:
             issues.append(f"{tag}: {doc} § {section} is edited twice in this call — one op per "
                           f"section, carrying the whole body you want it to end with")
-        # Two closes from one project state both replace this body; the later would silently
-        # drop the other's write.
+        # Two closes from one project state replace this body. Unchecked, the later one wins.
         elif replaces:
             live = _section_body(p.read_text(encoding="utf-8"), section) or ""
             if "expect" not in op:

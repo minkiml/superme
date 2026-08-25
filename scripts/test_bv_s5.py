@@ -1,7 +1,7 @@
 """The build-vet loop driver and its breakers.
 
-Every branch of the pure decision `decide_after_vet`, plus the invariant no branch may break:
-none of them parks inside the loop. Convergence is counted by appearance, not by equality.
+Every branch of `decide_after_vet`, plus the invariant none may break. No branch parks inside
+the loop. Convergence is counted by appearance, not equality.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s5
 """
@@ -338,7 +338,7 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
     ok("DENY waives the walled check → the rest passes (gap on record)",
        ev2["status"] == "passed" and ev2.get("waived") == ["walled"])
 
-    # FLOOR: there is no delegated grant. Every scope reaches the owner.
+    # There is no delegated grant. Every scope reaches the owner.
     ok("the deputy has no delegated authority to read",
        not any(hasattr(SystemSpine, n) for n in
                ("get_deputy_delegated_authority", "set_deputy_delegated_authority")))

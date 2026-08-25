@@ -448,7 +448,7 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
             checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
                            "detail": "no checks were owed — the approved plan declares `depth: none`"
                                      if ev.get("not_required") else detail})
-        # A pending request HOLDS the merge: deferred is not passed.
+        # A pending request holds the merge. Deferred is not passed.
         pend_auth = A.pending_authorizations(item_dir)
         if pend_auth:
             authorizations = [{"id": a.get("id", ""), "what": a.get("what", ""),

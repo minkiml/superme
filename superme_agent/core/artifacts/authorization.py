@@ -8,8 +8,7 @@ from .text import atomic_write, _one_line
 
 # the authorization ledger
 
-# Every scope is owner-reserved. Reconciling a doc to what shipped is not a decision and never
-# comes through here.
+# Reconciling a doc to what shipped is not a decision and never comes through here.
 AUTH_SCOPES = (
     "prd-identity",       # project-prd identity / goals / deliverables
     "roadmap-scope",      # add / remove / re-scope a roadmap deliverable

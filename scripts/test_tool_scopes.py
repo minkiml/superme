@@ -1,7 +1,7 @@
 """A session sees only the tools its work needs.
 
-`dev_tools.TOOL_SCOPES` is the one table, and this pins it: each recorder belongs to one
-phase, diagnosis writes nothing, and every skill's named tools are inside its own scope.
+`dev_tools.TOOL_SCOPES` is the one table. Each recorder belongs to one phase, diagnosis writes
+nothing, and every skill's named tools sit inside its own scope.
 
 Run: PYTHONPATH=. python scripts/test_tool_scopes.py
 """
