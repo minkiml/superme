@@ -37,6 +37,7 @@ SKILL_SCOPES: dict[str, tuple[str, ...]] = {
     "forge-skill": ("write",),
     "forge-agent": ("write",),
     "forge-constitution": ("write",),
+    "deputy": ("deputy",),
     "handoff": (),                      # core mode: no dev tools mounted at all
 }
 

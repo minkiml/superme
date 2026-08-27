@@ -29,9 +29,12 @@ log = logging.getLogger("superme-agent")
 HARNESS_DIR = APP_DIR / "harness"
 SELF_FILE = HARNESS_DIR / "SELF.md"
 # SELF.md says WHO in every mode; the charter says WHAT MODE. Picked by `Context.mode`.
+# Keyed by the frame a turn operates in. Usually the mode, but a deputy judges rather than
+# develops, so it selects its own.
 CHARTER_FILES = {
     "core": HARNESS_DIR / "core-charter.md",
     "dev": HARNESS_DIR / "dev-charter.md",
+    "deputy": HARNESS_DIR / "deputy-charter.md",
 }
 # Skill discovery is flat, so modes are separated by plugin, not by folder.
 PLUGINS_DIR = HARNESS_DIR / "plugins"

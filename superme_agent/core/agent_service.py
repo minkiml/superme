@@ -176,7 +176,12 @@ class AgentService:
                  "SuperMe's own codebase)" if ctx.layer == "global" else f"project host `{ctx.id}`")
         text = (
             f"\n\n## Operating context\n"
-            f"Host: {where} · context `{ctx.label}` · cwd `{ctx.cwd}`."
+            f"Host: {where} · context `{ctx.label}` · cwd `{ctx.cwd}`.\n"
+            # Skills name a tool bare. Looking one up under that name misses, and the fallback
+            # keyword search costs several more round-trips.
+            f"SuperMe's own tools are namespaced `mcp__<server>__<tool>`. Prompts and skills name "
+            f"them bare, so add the namespace when you look one up rather than searching the bare "
+            f"name."
         )
         # ABSOLUTE paths: the knowledge trees do not live under the cwd, so relative ones silently
         # miss.
@@ -218,6 +223,16 @@ class AgentService:
             "work-item for it); to record something new, add it. Don't re-derive the docs."
         ),
     }
+    # A category block means something different to each frame, and one message cannot be true of
+    # both. Keyed (frame, category); `_CATEGORY_DENY` answers for every frame without an entry.
+    _CATEGORY_DENY_BY_FRAME = {
+        ("deputy", "workspace"): (
+            "You judge this gate; you do not work the item. The phase skills belong to the run "
+            "that produces the artifacts, and this dispatch is read-only — running one would "
+            "redo work you were sent to assess. Judge what the artifacts show, and say so in "
+            "your verdict."
+        ),
+    }
     _CATEGORY_DENY_DEFAULT = "The `{category}` skills aren't available in this session."
 
     def _resolve_scope(self, ctx: Context):
@@ -231,7 +246,7 @@ class AgentService:
 
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
                         activated_assets, system_append: str | None = None,
-                        item_bound: bool = False) -> list[dict]:
+                        item_bound: bool = False, charter_key: str | None = None) -> list[dict]:
         """The layer-2 system append as ORDERED fragments.
 
         The single source of truth. Each carries `sep`, so joining them reproduces the append
@@ -246,9 +261,10 @@ class AgentService:
             add(name, location, text, sep="" if not frags else "\n\n")
 
         add_joined("Persona — SELF (who)", "harness/SELF.md", self._persona)
-        charter = self._charters.get(ctx.mode) or self._charters.get("core", "")
+        key = charter_key or ctx.mode
+        charter = self._charters.get(key) or self._charters.get("core", "")
         if charter:
-            add_joined(f"Charter — {ctx.mode} mode (what)", f"harness/{ctx.mode}-charter.md", charter)
+            add_joined(f"Charter — {key} mode (what)", f"harness/{key}-charter.md", charter)
         # Per-repo overlay, appended after the universal charter. Additive; most repos have none.
         if op_home is not None:
             local_charter = op_home / "charter.local.md"
@@ -282,30 +298,34 @@ class AgentService:
 
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
                          activated_assets, system_append: str | None = None,
-                         item_bound: bool = False) -> str:
+                         item_bound: bool = False, charter_key: str | None = None) -> str:
         """Join `_fragment_parts` into the layer-2 system append. THE single assembler,
         so a preview is byte-for-byte the real turn."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound))
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
+            charter_key=charter_key))
 
     def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
-                               item_bound: bool = False) -> str:
+                               item_bound: bool = False, charter_key: str | None = None) -> str:
         """Public seam for the prompt inspector: the exact append this
         (ctx, session_append) would send. `item_bound` must match the real turn."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
+            charter_key=charter_key)
 
     def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
-                                  item_bound: bool = False) -> list[dict]:
+                                  item_bound: bool = False,
+                                  charter_key: str | None = None) -> list[dict]:
         """The same append as `assemble_system_append`, but as ordered
         fragments [{name, location, text}]. Same builder, so they always agree."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
+            charter_key=charter_key)
         return [{"name": f["name"], "location": f["location"], "text": f["text"]} for f in frags]
 
     def _build_options(
@@ -320,18 +340,23 @@ class AgentService:
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
         item_bound: bool = False,
+        charter_key: str | None = None,
     ) -> ClaudeAgentOptions:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         append = self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
+            charter_key=charter_key)
         turn_plugins = [Path(p) for p in plugins_for(ctx.mode, op_home)]
         # skill name → the deny message for that block, which is the agent's only feedback.
         blocked: dict[str, str] = {}
         if enforce_silent:
             blocked.update({n: self._SILENT_SKILL_DENY for n in silent_skill_names(turn_plugins)})
+        frame = charter_key or ctx.mode
         for cat in (block_categories or ()):
-            msg = self._CATEGORY_DENY.get(cat, self._CATEGORY_DENY_DEFAULT.format(category=cat))
+            msg = (self._CATEGORY_DENY_BY_FRAME.get((frame, cat))
+                   or self._CATEGORY_DENY.get(cat)
+                   or self._CATEGORY_DENY_DEFAULT.format(category=cat))
             blocked.update({n: msg for n in skills_in_category(turn_plugins, cat)})
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),
@@ -399,6 +424,7 @@ class AgentService:
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
         item_bound: bool = False,
+        charter_key: str | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents. Raises on a hard SDK failure.
 
@@ -412,7 +438,7 @@ class AgentService:
             shell_roots=shell_roots, hooks=hooks, block_categories=block_categories,
             deny_write_tools=deny_write_tools,
             protected_paths=protected_paths, protected_nudge=protected_nudge,
-            sandbox_writes=sandbox_writes, item_bound=item_bound,
+            sandbox_writes=sandbox_writes, item_bound=item_bound, charter_key=charter_key,
         )
         resolved_model = None
         # Fill comes from a SINGLE call, not the turn aggregate: `Result.usage` sums round-trips

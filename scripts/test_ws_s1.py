@@ -417,7 +417,8 @@ def test_deputy(tmp: Path) -> None:
 
     # Preamble: identity + the floor + the injected strictness band + the tool ending.
     p = KS.deputy_preamble("extra")
-    ok("preamble carries identity+floor", "Deputy" in p and "must NOT approve" in p)
+    ok("preamble carries identity+floor",
+       "Deputy" in p and "must not approve" in p.lower())
     ok("preamble injects the level", "extra" in p and "plumbing" in p)
     ok("preamble names the verdict tool", "submit_gate_verdict" in p)
     p_lo = KS.deputy_preamble("low")

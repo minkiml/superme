@@ -211,6 +211,8 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                            "deputy": make_deputy_verdict_server(sink)},
         system_append=system_append,
         item_bound=True,                   # judging one item — no board-wide in-progress list
+        charter_key="deputy",              # it judges rather than develops, so not the dev charter
+        block_categories={"workspace"},    # a phase skill would redo the work it was sent to judge
         deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
     )
     if _autopilot.is_prompt_extraction(item):

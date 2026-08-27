@@ -4,16 +4,16 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
     "_resolve_scope(self, ctx: Context)",
-    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -212,16 +212,16 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
     "_resolve_scope(self, ctx: Context)",
-    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -2135,6 +2135,9 @@
   "VET_MODES": {
    "sig": "value:tuple"
   },
+  "WHOLE_SUITE_IS_BUILDS": {
+   "sig": "value:str"
+  },
   "_PROVES_MACHINE": {
    "sig": "value:Pattern"
   },
@@ -3823,6 +3826,9 @@
   "DEPUTY_STRICTNESS_LEVELS": {
    "sig": "value:tuple"
   },
+  "_COMPACTION_IMMINENT": {
+   "sig": "value:str"
+  },
   "_DEPUTY_LOG_CAP": {
    "sig": "value:int"
   },
@@ -3844,8 +3850,14 @@
   "_KIND_PHASE_CONTRACTS": {
    "sig": "value:dict"
   },
+  "_NO_REAL_CODE": {
+   "sig": "value:str"
+  },
   "_PHASE_CONTRACTS": {
    "sig": "value:dict"
+  },
+  "_REPORT_TEMPLATE_PHASES": {
+   "sig": "value:tuple"
   },
   "_TRACE_KINDS": {
    "sig": "value:set"
@@ -3892,7 +3904,7 @@
   },
   "close_trigger": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, title: str) -> str"
+   "sig": "def(item_id: str, title: str, *, merge_commit: str | None = None, nominated: int = 0) -> str"
   },
   "compaction_notice": {
    "home": "superme_agent.core.kernel_speech",
@@ -3949,6 +3961,10 @@
   "render_handoff_block": {
    "home": "superme_agent.core.kernel_speech",
    "sig": "def(item: dict, item_dir: pathlib.Path) -> tuple[str | None, int]"
+  },
+  "report_template_block": {
+   "home": "superme_agent.core.kernel_speech",
+   "sig": "def(phase: str) -> str"
   },
   "resolve_trigger": {
    "home": "superme_agent.core.kernel_speech",
@@ -5900,6 +5916,9 @@
   "VET_MODES": {
    "sig": "value:tuple"
   },
+  "WHOLE_SUITE_IS_BUILDS": {
+   "sig": "value:str"
+  },
   "_ITEM_ID": {
    "sig": "value:Pattern"
   },
@@ -6405,16 +6424,16 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
     "_resolve_scope(self, ctx: Context)",
-    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
