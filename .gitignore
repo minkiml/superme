@@ -61,3 +61,6 @@ general_docs/
 /scripts/pg_drive.py
 /scripts/compaction_bakeoff.py
 /scripts/probe_context_floor.py
+
+# Benchmark output: measurements, not source.
+scripts/bench-result/
