@@ -11,7 +11,9 @@ class KnowledgeOpArg(TypedDict):
                            "roadmap", "resources", "verification"],
                    ((((("which anchor doc this op edits. `verification` is close's library write "
                         "alone: append a nomination under `Available`, never under `Standing`")))))]
-    section: Annotated[str, "the exact `## heading` text the op targets (must exist in the doc)"]
+    section: Annotated[str, ((((("the heading text, given without the `##` marker, so "
+                                 "`Success signals` and never `## Success signals`. It must "
+                                 "already exist in the doc")))))]
     op: Annotated[Literal["update", "append", "supersede", "rename_section"],
                   ((((("`update` and `supersede` replace the section body · `append` extends it · "
                        "`rename_section` rewrites the heading line, with the new text in `content`")))))]
@@ -107,7 +109,9 @@ class PlanOpArg(TypedDict, total=False):
                            ((((("`update` and `append` act on a section body · `add_task`, "
                                 "`edit_task` and `remove_task` act on one task line, whose `- [x]` "
                                 "state survives an edit")))))]]
-    section: Annotated[str, "section ops only: the exact `## heading` text (must already exist)"]
+    section: Annotated[str, ((((("section ops only: the heading text given without the `##` "
+                                 "marker, so `Tasks` and never `## Tasks`. It must already "
+                                 "exist")))))]
     task: Annotated[str, "edit_task/remove_task only: the task id, e.g. `t3`"]
     content: Annotated[str, (((((("a section body without its `## heading` for section ops, or the "
                                   "task text without its `- [ ] t<n>` prefix. Omit for "

@@ -7,6 +7,7 @@ Available is the default, and only the owner promotes. Close writes; vet only no
 import re
 from pathlib import Path
 
+from .artifacts.vet_plan import WHOLE_SUITE_IS_BUILDS
 from .artifacts import (FILL, VET_MODES, split_sections, vet_value, parse_check_blocks,
                         VET_CHECK_ID, is_whole_suite_run)
 
@@ -122,9 +123,9 @@ def entry_issues(block: str) -> list[str]:
         # A whole-suite run is build's validation. Inheriting it files the suite's result as the
         # item's own proof.
         if c.get("run") and is_whole_suite_run(str(c["run"])):
-            issues.append(f"library entry {label!r}: `run:` is the project's whole test suite — "
-                          "that is BUILD's validation, not a verification asset. The library holds "
-                          "standing questions about the PRODUCT's behaviour, in the product's terms")
+            issues.append(f"library entry {label!r}: {WHOLE_SUITE_IS_BUILDS} It is not a "
+                          "verification asset. The library holds standing questions about the "
+                          "PRODUCT's behaviour, in the product's terms")
     if FILL.search(block):
         issues.append("unfilled <fill:…> slot(s) — an entry the next plan inherits cannot have gaps")
     for pat, what in ((_TASK_REF, "a task id (t<n>)"), (_ITEM_ID, "a work-item id")):

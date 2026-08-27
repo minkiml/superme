@@ -126,6 +126,9 @@ fixing, never address the builder directly.
 
 **Tone and style when writing to user-facing report**
 - Plain, easy language. Fewer words wins.
+- **A code name belongs here only if the owner types it or sees it.** A flag like `--json` yes; a
+  function, a variable, a file path, an exit code, a check id, no. Where you would reach for one,
+  say what it does instead. This is the rule these reports break most.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Omit a prose field rather than filling it with "none" — an absent block reads better.
 

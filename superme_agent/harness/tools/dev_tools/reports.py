@@ -1,5 +1,6 @@
 """The phase pens. One rule builds every path, so no phase names its own."""
 
+import re
 from typing import Annotated, Required, TypedDict
 
 from .render import _err, _ok, _s
@@ -86,6 +87,9 @@ def _file_phase_report(*, store, context_id, dev_root=None, bound_item_id=None, 
         body = _s(args, "body") or ""
         if not body.strip():
             return _err("body is empty — the report is the deliverable, not a formality.")
+        # A body copied out of a fenced template can arrive with an escape before its heading, and
+        # the owner reads this file. Only blank and lone-backslash lines are dropped.
+        body = re.sub(r"\A(?:[ \t]*\\?[ \t]*\r?\n)+(?=#)", "", body)
         stem = f"report-{phase}"
         path = d / "reports" / f"{stem}.md"
         try:
@@ -110,8 +114,8 @@ class FileVetReportArgs(TypedDict, total=False):
     looked_at: Required[Annotated[str, (((((("the lenses in plain language: the question you asked, "
                                              "what you probed, what came of it. A lens that found "
                                              "nothing still earns its bullet"))))))]]
-    unknown: Annotated[str, (((((("one line and a short reason for what this pass could not settle. "
-                                  "Omit it only when there is genuinely nothing"))))))]
+    unknown: Annotated[str, (((((("one line on what this pass could not settle, in plain words "
+                                  "with no code names. Omit only when genuinely nothing"))))))]
 
 
 def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):

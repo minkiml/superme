@@ -122,6 +122,10 @@ def is_whole_suite_run(cmd: str) -> bool:
     return not _SUITE_NARROWERS.search(tail)
 
 
+# The diagnosis both readers of a `run:` share. Each states its own remedy.
+WHOLE_SUITE_IS_BUILDS = "`run:` is the project's whole test suite, which is BUILD's validation."
+
+
 def vet_plan_hard_issues(vp: dict) -> list[str]:
     """The gate-blocking structural rules, every one mechanically decidable.
 
@@ -166,8 +170,8 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
         # proof. HARD.
         if c.get("run") and is_whole_suite_run(str(c.get("run"))):
             issues.append(
-                f"vet plan check {label!r}: `run:` is the project's whole test suite — that is "
-                "BUILD's validation, which it runs every cycle and the kernel re-runs to audit. "
+                f"vet plan check {label!r}: {WHOLE_SUITE_IS_BUILDS} It runs every cycle and the "
+                "kernel re-runs it to audit. "
                 "Drop this check, or narrow the command to the ONE behaviour this item promises "
                 "(a single test, a scenario) and say in `proves:` what that green means for the "
                 "owner")

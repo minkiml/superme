@@ -75,9 +75,14 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
             continue
         if not section:
             issues.append(f"{tag}: missing section")
-        elif section not in _sections(p.read_text(encoding="utf-8")):
-            issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
-                          f"{', '.join(_sections(p.read_text(encoding='utf-8'))) or '(none)'}")
+        elif section not in (heads := _sections(p.read_text(encoding="utf-8"))):
+            # Carrying the `##` through is the one miss that happens, so name it rather than
+            # echoing '## ## Heading' back and leaving the agent to guess.
+            if (bare := section.lstrip("#").strip()) in heads:
+                issues.append(f"{tag}: pass the section as '{bare}', without the '##' marker")
+            else:
+                issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
+                              f"{', '.join(heads) or '(none)'}")
         # Ops read the doc on disk, so a second op on one section reads stale text.
         elif (doc, section) in seen:
             issues.append(f"{tag}: {doc} § {section} is edited twice in this call — one op per "

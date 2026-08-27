@@ -177,12 +177,16 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
         lines.append(f"- **{g['text']}** — raised by the {g['lens']} reading ({g['severity']}).")
     # A build validation claim the kernel could not reproduce — the one record that must not
     # depend on being mentioned.
-    for a in validation_discrepancies(item_dir, cycle=(cycle_reports(item_dir) or [{}])[-1].get("cycle")):
+    # The COUNT is the owner's finding; the command and its output are a wall of code they never
+    # typed, and the cycle report already holds both.
+    if (disagreed := validation_discrepancies(
+            item_dir, cycle=(cycle_reports(item_dir) or [{}])[-1].get("cycle"))):
+        n = len(disagreed)
         lines.append(
-            f"- **The build reported `{a['command']}` as "
-            f"{'passing' if a['claimed'] else 'failing'}, and re-running it here "
-            f"{'passes' if a['actual'] else 'does not'}** — its own validation does not reproduce. "
-            f"({a['result']})")
+            f"- **The build's own proof did not hold up when re-run here** — "
+            f"{n} of its checks behaved differently the second time. That does not mean the work is "
+            f"wrong, but it does mean the build's word for it is not evidence. The commands and "
+            f"their output are in this cycle's build record.")
     machine = ("## What didn't hold\n" + "\n".join(lines) + "\n\n") if lines else ""
     # A `depth: none` item still gets a reading, and that reading can GATE — so this note PRECEDES
     # the block.
