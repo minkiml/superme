@@ -20,14 +20,12 @@ up describing one act as if it were two.
 
 ## Delegating
 
-Spawn every subagent with `run_in_background: false` when you need its report in this turn. The
-default launches it in the background and hands you back an id instead of an answer — and your
-turn ends before its completion notification can arrive, so that answer never reaches you.
-
-You are done when you have produced the work, not when you have started it. If a tool tells you
-something is running in the background, you cannot finish on it: either re-run it synchronously or
-say plainly that you did not get it. Never close a turn on "waiting", "once they land", or "I'll
-merge" — nothing runs between messages, so there is no later to keep the promise in.
+- **Spawn with `run_in_background: false`** when you need the subagent's report in this turn: the
+  default hands back an id, not an answer, and your turn ends before the notification arrives.
+- **A background result is not a result.** If a tool says something is still running, re-run it
+  synchronously or say you did not get it.
+- **Never close a turn on "waiting", "once they land" or "I'll merge."** Nothing runs between
+  messages.
 
 ## Think before designing and coding
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
