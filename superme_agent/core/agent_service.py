@@ -38,6 +38,14 @@ from .vocab.sandbox import sandbox_options
 
 log = logging.getLogger("superme-agent")
 
+# The two channels a turn's authored text can ride in. The system one is the CACHED prefix, so
+# anything phase-varying placed there re-writes the whole cache at every phase boundary; the turn
+# one is the user message, which is appended to a thread rather than rewritten in it.
+SYSTEM_CHANNEL, TURN_CHANNEL = "system", "turn"
+# The same boundary the birth block uses, so ONE rule peels every kernel-injected prefix back off
+# a message before a person is shown what they typed (`sessions._strip_kernel_prefix`).
+TURN_SEP = "\n\n---\n\n"
+
 # The CLI's last stderr lines: ProcessError says to check a stderr the SDK never piped.
 _CLI_STDERR: deque[str] = deque(maxlen=40)
 
@@ -245,16 +253,18 @@ class AgentService:
         return op_home, const_universal, const_repo, activated_assets
 
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
-                        activated_assets, system_append: str | None = None,
+                        activated_assets, preamble: str | None = None,
                         item_bound: bool = False, charter_key: str | None = None) -> list[dict]:
-        """The layer-2 system append as ORDERED fragments.
+        """Everything the turn is given, as ORDERED fragments.
 
-        The single source of truth. Each carries `sep`, so joining them reproduces the append
-        byte-for-byte."""
+        The single source of truth. Each carries `channel` — the cached system prefix, or the user
+        message — and `sep`, so joining a channel reproduces it byte-for-byte."""
         frags: list[dict] = []
 
-        def add(name: str, location: str, text: str, *, sep: str) -> None:
-            frags.append({"name": name, "location": location, "text": text, "sep": sep})
+        def add(name: str, location: str, text: str, *, sep: str,
+                channel: str = SYSTEM_CHANNEL) -> None:
+            frags.append({"name": name, "location": location, "text": text, "sep": sep,
+                          "channel": channel})
 
         # The leading joined group: "\n\n" between members, nothing before the first.
         def add_joined(name: str, location: str, text: str) -> None:
@@ -284,54 +294,70 @@ class AgentService:
         if ctx.persona_append:
             add("Project persona append", "Context.persona_append (per-project)",
                 ctx.persona_append, sep="\n\n")
-        # Core stays session-agnostic: it just appends what the daemon hands in.
-        if system_append:
+        # The one fragment that varies by PHASE, so it rides the turn: in the append it would
+        # re-write the whole cached prefix at every phase boundary. `compose_prompt` places it.
+        if preamble:
             add("Session-kind block — focus/guard/phase",
-                "core/kernel_speech.py · work_item_preamble (Current focus/Guard/phase)", system_append,
-                sep="\n\n")
+                "core/kernel_speech.py · work_item_preamble (Current focus/Guard/phase)", preamble,
+                sep="", channel=TURN_CHANNEL)
         return frags
 
     @staticmethod
     def _join_fragments(frags: list[dict]) -> str:
-        """Reconstruct the append string from its fragments — the byte-for-byte inverse of the split."""
-        return "".join(f["sep"] + f["text"] for f in frags)
+        """Reconstruct the system append — the byte-for-byte inverse of the split. Turn-channel
+        fragments are not part of it; `compose_prompt` places those."""
+        return "".join(f["sep"] + f["text"] for f in frags
+                       if f.get("channel", SYSTEM_CHANNEL) == SYSTEM_CHANNEL)
+
+    @staticmethod
+    def compose_prompt(preamble: str | None, prompt: str) -> str:
+        """The message a turn actually sends.
+
+        The session-kind block rides HERE rather than in the system append, because it is the only
+        part that varies by phase and the append is the CACHED prefix: ~650 tokens of pointer
+        sitting there invalidated ~74,000 tokens of it, measured. Placed after the messages it
+        costs 1,433. Every turn restates it, which is also what carries it through a compaction —
+        a summary can drop a message, but it cannot drop the one being sent."""
+        return f"{preamble}{TURN_SEP}{prompt}" if preamble else prompt
 
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
-                         activated_assets, system_append: str | None = None,
-                         item_bound: bool = False, charter_key: str | None = None) -> str:
+                         activated_assets, item_bound: bool = False,
+                         charter_key: str | None = None) -> str:
         """Join `_fragment_parts` into the layer-2 system append. THE single assembler,
         so a preview is byte-for-byte the real turn."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
-            charter_key=charter_key))
+            activated_assets=activated_assets, item_bound=item_bound, charter_key=charter_key))
 
-    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
-                               item_bound: bool = False, charter_key: str | None = None) -> str:
-        """Public seam for the prompt inspector: the exact append this
-        (ctx, session_append) would send. `item_bound` must match the real turn."""
+    def assemble_system_append(self, ctx: Context, *, item_bound: bool = False,
+                               charter_key: str | None = None) -> str:
+        """Public seam for the prompt inspector: the exact append this ctx would send. It takes no
+        preamble because it no longer carries one — that block rides the turn (`compose_prompt`),
+        which is what keeps this string identical across a work item's phases. `item_bound` must
+        match the real turn."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
-            charter_key=charter_key)
+            activated_assets=activated_assets, item_bound=item_bound, charter_key=charter_key)
 
-    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
+    def assemble_system_fragments(self, ctx: Context, *, preamble: str | None = None,
                                   item_bound: bool = False,
                                   charter_key: str | None = None) -> list[dict]:
-        """The same append as `assemble_system_append`, but as ordered
-        fragments [{name, location, text}]. Same builder, so they always agree."""
+        """Everything the turn is given, as ordered fragments
+        [{name, location, text, channel}]. Same builder as the append and the composed prompt, so
+        all three always agree."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
+            activated_assets=activated_assets, preamble=preamble, item_bound=item_bound,
             charter_key=charter_key)
-        return [{"name": f["name"], "location": f["location"], "text": f["text"]} for f in frags]
+        return [{"name": f["name"], "location": f["location"], "text": f["text"],
+                 "channel": f["channel"]} for f in frags]
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
         enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False,
-        system_append: str | None = None, gate_general_mutations: bool = False,
+        gate_general_mutations: bool = False,
         general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
         shell_roots: list[Path] | None = None,
         hooks: dict | None = None, block_categories: set[str] | None = None,
@@ -345,8 +371,7 @@ class AgentService:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         append = self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound,
-            charter_key=charter_key)
+            activated_assets=activated_assets, item_bound=item_bound, charter_key=charter_key)
         turn_plugins = [Path(p) for p in plugins_for(ctx.mode, op_home)]
         # skill name → the deny message for that block, which is the agent's only feedback.
         blocked: dict[str, str] = {}
@@ -412,7 +437,7 @@ class AgentService:
         extra_mcp_servers: dict | None = None,
         enforce_silent: bool = True,
         scope_reads: bool = False,
-        system_append: str | None = None,
+        preamble: str | None = None,
         gate_general_mutations: bool = False,
         general_write_root: Path | None = None,
         write_boundary: list[Path] | None = None,
@@ -432,8 +457,7 @@ class AgentService:
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
-            scope_reads=scope_reads, system_append=system_append,
-            gate_general_mutations=gate_general_mutations,
+            scope_reads=scope_reads, gate_general_mutations=gate_general_mutations,
             general_write_root=general_write_root, write_boundary=write_boundary,
             shell_roots=shell_roots, hooks=hooks, block_categories=block_categories,
             deny_write_tools=deny_write_tools,
@@ -447,7 +471,7 @@ class AgentService:
         # A tool result arrives with a tool_use_id and no name, so correlate it back to its call.
         tool_names: dict[str, str] = {}
         async with ClaudeSDKClient(options=options) as client:
-            await client.query(prompt)
+            await client.query(self.compose_prompt(preamble, prompt))
             async for message in client.receive_response():
                 if isinstance(message, SystemMessage):
                     # The init system message reports the resolved model + the slash

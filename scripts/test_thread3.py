@@ -170,6 +170,42 @@ def test_runners_flip() -> None:
     ok("no runner passes the retired kwarg, says 'headless', or parses a fence", True)
 
 
+# ------------------------------------------------------------------ prompt channels
+def test_channels() -> None:
+    print("channels — the phase pointer rides the turn, never the cached append")
+    from superme_agent.core.agent_service import (SYSTEM_CHANNEL, TURN_CHANNEL, TURN_SEP,
+                                                  AgentService as AS)
+    frags = [{"text": "STANDING", "sep": "", "channel": SYSTEM_CHANNEL},
+             {"text": "POINTER", "sep": "\n\n", "channel": TURN_CHANNEL}]
+    ok("the append joins system fragments only", AS._join_fragments(frags) == "STANDING")
+    ok("an untagged fragment reads as system-borne, so a pre-split capture still renders",
+       AS._join_fragments([{"text": "OLD", "sep": ""}]) == "OLD")
+    ok("compose_prompt puts the pointer ahead of the trigger",
+       AS.compose_prompt("POINTER", "TRIGGER") == f"POINTER{TURN_SEP}TRIGGER")
+    ok("a turn with no pointer sends the trigger untouched",
+       AS.compose_prompt(None, "TRIGGER") == "TRIGGER")
+    # The chat transcript replays these messages back to the owner. Every block SuperMe injects
+    # ahead of their words has to come back off, or they are shown 2,700 chars they never typed.
+    from superme_agent.core.sessions import _strip_kernel_prefix as strip
+    mine, birth = "look at the failing test", "### Work-item orientation\nstuff"
+    for label, block in (("work-item", KS.work_item_preamble("it1", {"phase": "plan"}, FIXTURE_DIR,
+                                                             interactive=True)),
+                         ("general", KS.general_preamble()),
+                         ("deputy", KS.deputy_preamble())):
+        ok(f"the {label} block comes back off the owner's message",
+           strip(AS.compose_prompt(block, mine)) == mine)
+    ok("a birth block behind the session block comes off too",
+       strip(AS.compose_prompt(KS.general_preamble(), birth + TURN_SEP + mine)) == mine)
+    # Renamed because it stopped being true. A straggler is not a stale name: `run_turn` would
+    # TypeError, inside a background run nobody is watching.
+    # The binding, not the name: `assemble_system_append` is still the honest name of the method
+    # that builds the append — what must be gone is anything PASSING a pointer into it.
+    stragglers = sorted(p.relative_to(ROOT).as_posix()
+                        for p in (ROOT / "superme_agent").rglob("*.py")
+                        if re.search(r"system_append\s*=", p.read_text(encoding="utf-8")))
+    ok("nothing hands the phase pointer to the system append", not stragglers, str(stragglers))
+
+
 # ------------------------------------------------------------------ skills + preamble hedge
 def test_skills() -> None:
     print("skills — Background runs sections keep deltas, lose narration")
@@ -368,6 +404,7 @@ def main() -> None:
     test_run_protocol()
     test_triggers()
     test_runners_flip()
+    test_channels()
     test_skills()
     test_reader()
     test_snapshot()

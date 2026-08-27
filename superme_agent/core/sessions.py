@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from ..paths import CLAUDE_PROJECTS_DIR
+from .agent_service import TURN_SEP
 from .vocab.context import Context
 from .spine import SystemSpine, get_spine
 from .vocab.kind_profiles import is_conversation
@@ -62,19 +63,31 @@ def _is_noise(record: dict, text: str) -> bool:
 
 # Prepended to a session's FIRST user prompt. Dropping the whole record would hide what the owner
 # typed.
-_BIRTH_BLOCK_HEADERS = (
+# Every block SuperMe injects ahead of a person's own words, by the header it opens with. The
+# first two are written once at session birth; the rest are the session block, which rides every
+# turn since it left the system append.
+_KERNEL_PREFIX_HEADERS = (
     "### Work-item orientation",
     "### Subject activity-run trace",
+    "## Current focus",
+    "## General session",
+    "## Deputy",
 )
 
 
-def _strip_birth_block(text: str) -> str:
-    """Cut a kernel-injected birth block off a prompt, keeping the real message
-    after the `---`."""
-    if not text.lstrip().startswith(_BIRTH_BLOCK_HEADERS):
-        return text
-    parts = text.split("\n\n---\n\n", 1)
-    return parts[1] if len(parts) == 2 else ""
+def _strip_kernel_prefix(text: str) -> str:
+    """Cut SuperMe's own injected blocks off a prompt, leaving the message a person actually sent.
+
+    A turn can carry more than one — the session block, then a birth orientation — so peel until
+    what is left opens with none of them. Text that is prefix all the way down was never a
+    message."""
+    out = text
+    while out.lstrip().startswith(_KERNEL_PREFIX_HEADERS):
+        parts = out.split(TURN_SEP, 1)
+        if len(parts) != 2:
+            return ""
+        out = parts[1]
+    return out
 
 
 def _short_id(sid: str) -> str:
@@ -212,7 +225,7 @@ class SessionStore:
             elif t in _ROLE:
                 text = _blocks_text((d.get("message") or {}).get("content"))
                 if t == "user":
-                    text = _strip_birth_block(text)
+                    text = _strip_kernel_prefix(text)
                 if not text.strip() or _is_noise(d, text):
                     continue
                 role = _ROLE[t]

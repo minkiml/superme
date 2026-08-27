@@ -11,6 +11,7 @@ import json
 import logging
 import re
 
+from ...core.agent_service import SYSTEM_CHANNEL, TURN_CHANNEL, TURN_SEP
 from ...core.vocab import kind_profiles
 
 log = logging.getLogger("superme-agent")
@@ -153,6 +154,19 @@ def _split_body(body: str) -> tuple[str | None, str]:
     return None, b
 
 
+def _peel_turn_block(body: str, turn_frags: list[dict]) -> tuple[list[dict], str]:
+    """Peel the turn-borne session block off the front of the recorded body.
+
+    Matched against the RECORDED fragment text, never re-derived — a block that does not actually
+    open the body is not reported as one, so a drifted capture reads as drifted."""
+    b = body or ""
+    for f in turn_frags:
+        head = (f.get("text") or "") + TURN_SEP
+        if head.strip() and b.startswith(head):
+            return [f], b[len(head):]
+    return [], b
+
+
 def _frag_card(text: str, *, name: str, location: str, gate: bool = False) -> str:
     """One fragment sub-card: the prompt-text box at full reading width, plus a right-side info gutter in
     the page's added space, so the text is never narrowed."""
@@ -227,7 +241,7 @@ def _render_surface(surface: dict | None) -> str:
     # widget.
     w = max(len(k) for k, _ in rows)
     text = "\n".join(f"{k.ljust(w)}   {v}" for k, v in rows)
-    return _render_section("⑥ Turn surface — what this run was ALLOWED to do", [{
+    return _render_section("⑦ Turn surface — what this run was ALLOWED to do", [{
         "name": "capability, not prose", "location": "daemon/services/runs.py · turn_surface()",
         "text": text}])
 
@@ -239,16 +253,26 @@ def render_input_page(data: dict) -> str:
     m = data["meta"]
     mode_chip = ("mode-captured", "ACTUAL · as sent to the model")
     banner = "This is the exact input that was sent to the model for this run."
-    # Three channels: the system prompt is assembled per run, the orient block written once at
-    # birth, the trigger fresh.
-    sys_frags = data.get("system_fragments") or [
+    # The system prompt is assembled per run and carries nothing phase-specific; the rest arrives
+    # as one message — the session block, then the birth orient block, then this run's trigger.
+    frags = data.get("system_fragments") or [
         {"name": "System append (whole)", "location": "agent_service.assemble_system_append()",
          "text": data.get("system_prompt", "")}]
+    # A capture taken before the block moved has no `channel`, and everything in it was system-borne.
+    sys_frags = [f for f in frags if f.get("channel", SYSTEM_CHANNEL) == SYSTEM_CHANNEL]
     sys_html = _render_section(
-        "① System prompt — assembled fresh each run (reflects current state)", sys_frags)
+        "① System prompt — assembled fresh each run · nothing phase-specific rides here", sys_frags)
 
-    orient, trig = _split_body(data.get("prompt_body", ""))
-    orient_title = "② Prompt body · orient block — written once at session birth (run-1 snapshot)"
+    block, body = _peel_turn_block(data.get("prompt_body", ""),
+                                   [f for f in frags if f.get("channel") == TURN_CHANNEL])
+    block_title = "② Prompt body · session block — the phase pointer, restated every turn"
+    block_html = _render_section(block_title, block) if block else _gate_section(
+        block_title, name="no session block on this run",
+        note="This run sent no focus/guard block — a general session, or a capture taken before "
+             "the block moved out of the system append, where it would show under ① instead.")
+
+    orient, trig = _split_body(body)
+    orient_title = "③ Prompt body · orient block — written once at session birth (run-1 snapshot)"
     if orient is not None:
         orient_html = _render_section(orient_title, _fragment_orient(orient))
     else:
@@ -258,7 +282,7 @@ def render_input_page(data: dict) -> str:
                  "On a pre-retirement resumed session it sits earlier in the replayed "
                  "transcript. Only the trigger below is new to this run.")
 
-    trig_title = "③ Prompt body · user message / trigger — this run’s injected message"
+    trig_title = "④ Prompt body · user message / trigger — this run’s injected message"
     if m.get("is_gate"):
         trig_html = _gate_section(
             trig_title, name="gate — no trigger",
@@ -272,15 +296,15 @@ def render_input_page(data: dict) -> str:
     # tool docs ride every request.
     skills, tools = data.get("skills") or [], data.get("tools") or []
     skill_html = _render_section(
-        "④ Phase skill — the procedure this run was told to invoke", skills) if skills else \
-        _gate_section("④ Phase skill — the procedure this run was told to invoke",
+        "⑤ Phase skill — the procedure this run was told to invoke", skills) if skills else \
+        _gate_section("⑤ Phase skill — the procedure this run was told to invoke",
                       name="no skill for this phase",
                       note="This phase's contract names no skill (or its SKILL.md was missing at "
                            "capture time). The `references/` guides a skill cites are pulled on "
                            "demand and never appear here — they cost nothing unless read.")
     tools_html = _render_section(
-        "⑤ Tool docs — descriptions + parameter docs, sent with every request", tools) if tools else ""
-    body_html = (f"{orient_html}{trig_html}{skill_html}{tools_html}"
+        "⑥ Tool docs — descriptions + parameter docs, sent with every request", tools) if tools else ""
+    body_html = (f"{block_html}{orient_html}{trig_html}{skill_html}{tools_html}"
                  f"{_render_surface(data.get('surface'))}")
     title = html.escape(f"{m['item_id']} — {m['title']}")
     return (

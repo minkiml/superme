@@ -64,3 +64,7 @@ general_docs/
 
 # Benchmark output: measurements, not source.
 scripts/bench-result/
+/scripts/probe_fork.py
+/scripts/probe_compaction.py
+/scripts/probe_curve.py
+/scripts/probe_ttl.py

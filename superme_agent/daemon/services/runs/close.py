@@ -106,12 +106,12 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope="close"),
                            "run": make_run_report_server(sink)},
-        system_append=focus,
+        preamble=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     )
     # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
     if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
+        capture_run_input(context_id, item_id, ctx=ctx, preamble=focus, prompt=prompt,
                           phase="close",
                           surface=surface_from_turn(turn_kwargs, mcp=["dev", "run"]),
                           background=True)

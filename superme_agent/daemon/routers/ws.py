@@ -537,7 +537,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # default; stated because chat is where a silent skill tempts
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
-                    system_append=session_append,       # Focus (work-item) / Guard (general) block
+                    preamble=session_append,       # Focus (work-item) / Guard (general) block
                     # A bound chat already names its subject, so it skips the board-wide list; an
                     # unbound session keeps it.
                     item_bound=bool(work_item_id),

@@ -244,7 +244,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id,
                                       scope=str(live_item.get("phase") or phase)),
                            "run": make_run_report_server(sink)},
-        system_append=focus,
+        preamble=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     ):
         if isinstance(ev, Usage):

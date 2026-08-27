@@ -190,7 +190,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
     return {"skills": skills, "tools": tools}
 
 
-def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
+def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | None,
                       prompt: str, background: bool, phase: str | None,
                       surface: dict | None = None) -> None:
     """Persist the ACTUAL input a run is about to send, keyed to the live run.
@@ -204,13 +204,15 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
         _spine.set_run_feature(rid, PROMPT_EXTRACTION_FEATURE)
         # `item_bound=True` changes what the operating-context fragment renders; without it the
         # preview shows a prompt no run sent.
-        system_prompt = _agent.assemble_system_append(ctx, system_append=system_append,
-                                                      item_bound=True)
-        # Provenance breakdown from the same builder, so the fragments sum to `system_prompt`.
+        system_prompt = _agent.assemble_system_append(ctx, item_bound=True)
+        # The preamble is not in the append — it rides the turn, so the recorded body is the
+        # COMPOSED message, built by the same function the real turn calls.
+        prompt_body = _agent.compose_prompt(preamble, prompt)
+        # Provenance for both channels from the same builder: the system-channel fragments sum to
+        # `system_prompt`, the turn-channel one opens `prompt_body`.
         # Guarded: a hiccup must not lose the capture.
         try:
-            frags = _agent.assemble_system_fragments(ctx, system_append=system_append,
-                                                     item_bound=True)
+            frags = _agent.assemble_system_fragments(ctx, preamble=preamble, item_bound=True)
             fragments_json = _json.dumps(frags, ensure_ascii=False)
         except Exception:  # noqa: BLE001
             fragments_json = None

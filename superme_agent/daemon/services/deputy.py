@@ -191,7 +191,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         state=state, report=_arts.report_text(item_dir, str(state.get("phase") or "")),
         mandate=mandate, log_digest=digest, delta=delta, success_signal=signal,
         verdicts=verdicts, authorizations=auth_block)
-    system_append = kernel_speech.deputy_preamble(strictness)
+    preamble = kernel_speech.deputy_preamble(strictness)
     capture_prompt(context_id, f"[deputy] judging the {gate} gate", item_id=item_id)
     # Throwaway probes only. The deputy judges three gates and costs real tokens, so it needs a
     # capture site too.
@@ -209,14 +209,14 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         sandbox_writes=[],                 # …and sandboxed anyway: cwd only, no network
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope="deputy"),
                            "deputy": make_deputy_verdict_server(sink)},
-        system_append=system_append,
+        preamble=preamble,
         item_bound=True,                   # judging one item — no board-wide in-progress list
         charter_key="deputy",              # it judges rather than develops, so not the dev charter
         block_categories={"workspace"},    # a phase skill would redo the work it was sent to judge
         deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
     )
     if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=ctx, system_append=system_append,
+        capture_run_input(context_id, item_id, ctx=ctx, preamble=preamble,
                           prompt=prompt, phase=f"deputy:{gate}",
                           surface=surface_from_turn(turn_kwargs, mcp=["dev", "deputy"]),
                           background=True)
