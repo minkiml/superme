@@ -66,17 +66,26 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
                                 model: str | None = None, effort: str | None = None) -> None:
-    """Drive the item's ONE closing turn: resume its intake thread and reflect the locked changes.
+    """Drive the item's ONE closing turn: reflect the locked changes into the anchor docs.
 
     The kernel clears the item from there, so the run never completes it."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
-    session_id = ((item.get("sessions") or {}).get("intake") or item.get("session_id") or None)
+    # `read_work_item` computes this as the CURRENT phase's slot, so it is close's own thread on a
+    # retry and None on the first entry, like every other phase.
+    session_id = item.get("session_id") or None
     title = item.get("title") or item_id
-    prompt = kernel_speech.close_trigger(item_id, title)
+    # Both are already on record here; close used to spend a turn each rediscovering them.
+    from ....core import artifacts as _arts
+    try:
+        nominated = len(_arts.nominations(item_dir))
+    except Exception:  # noqa: BLE001 — a missing plan must not cost the closing run
+        nominated = 0
+    prompt = kernel_speech.close_trigger(
+        item_id, title, merge_commit=item.get("git_merge_commit"), nominated=nominated)
     capture_prompt(context_id, prompt, item_id=item_id)
-    # The resumed transcript carries the bulk; this is the standing phase/role pointer every
-    # runner sends.
+    # The standing phase/role pointer every runner sends. A first close has no thread behind it,
+    # so the trigger and the item folder are all it starts from.
     focus = kernel_speech.work_item_preamble(
         item_id, item, str(item_dir), interactive=False, shell_cwd=ctx.cwd,
         anchor_dir=str(ctx.internal_root / "dev" / "general"),
@@ -89,7 +98,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
                          notify=retry_notice(context_id, item_id, "close"))
     # Built once, then both SNAPSHOTTED and SENT — see `surface_from_turn`.
     turn_kwargs = dict(
-        resume=session_id,   # RESUME the intake thread — the closeout narrates the whole item
+        resume=session_id,   # this PHASE's own thread; None the first time it is entered
         model=model,
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(item_dir, deny_all),

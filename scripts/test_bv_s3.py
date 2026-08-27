@@ -251,8 +251,11 @@ def test_reentry_delta(tmp: Path) -> None:
 
     # The trigger: silence for a first entry, named files for a re-entry. "Be careful" is neither.
     plain = kernel_speech.intake_trigger("review", wid, "T")
-    ok("first entry: the thin trigger, unchanged", plain.strip().endswith('("T").')
-       and "\n" not in plain)
+    # The trigger also carries this phase's report template now, so "thin" is about the CHANGED
+    # block, not about length: a first entry claims nothing moved.
+    ok("first entry: no changed-files block",
+       plain.startswith('Run superme-dev:review for work-item `%s` ("T").' % wid)
+       and "changed on disk" not in plain and "Re-read every one of them" not in plain)
     ok("nothing moved ⇒ same thin trigger", kernel_speech.intake_trigger("review", wid, "T", []) == plain)
     re_entry = kernel_speech.intake_trigger("review", wid, "T", got)
     ok("re-entry names every changed file",
@@ -296,6 +299,23 @@ def test_titles() -> None:
        set(__import__("superme_agent.core.vocab.kind_profiles", fromlist=["SESSION_KINDS"]).SESSION_KINDS))
 
 
+def test_one_reader() -> None:
+    """`_session_fields` owns the fallback chain, so no runner may re-implement it.
+
+    A caller that reaches for the retired `intake` slot itself gets None where the computed
+    `session_id` would have answered — the close run resumed nothing for nine live runs that way."""
+    print("runners resolve resume through the computed session_id, not the retired slot")
+    import superme_agent.daemon.services.gates as _gates
+    from superme_agent.daemon.services.runs import background as _bg
+    from superme_agent.daemon.services.runs import close as _close
+    for mod in (_close, _bg, _gates):
+        src = Path(mod.__file__).read_text(encoding="utf-8")
+        hits = [ln.strip() for ln in src.splitlines()
+                if "session" in ln and '"intake"' in ln and "sessions" in ln]
+        ok(f"{Path(mod.__file__).name} resolves no session by the retired slot", not hits,
+           "; ".join(hits[:2]))
+
+
 def _raises(fn) -> bool:
     try:
         fn()
@@ -313,6 +333,7 @@ def main() -> None:
         test_resolve(tmp)
         test_reentry_delta(tmp)
         test_titles()
+        test_one_reader()
     print(f"\nALL GREEN — {PASS} checks passed (self-cleaned).")
 
 

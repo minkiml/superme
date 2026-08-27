@@ -21,10 +21,10 @@ log = logging.getLogger("superme-agent")
 def _compact_then_readvance(ctx, context_id: str, item_id: str, item: dict) -> bool:
     """The background chain's run-start compaction check.
 
-    True means one was scheduled and the caller must return. Only the intake session is checked, as
-    it is the one that accumulates."""
+    True means one was scheduled and the caller must return. The session checked is the one the
+    phase that just ran left behind; nothing accumulates across phases."""
     from . import compaction
-    session_id = (item.get("sessions") or {}).get("intake") or item.get("session_id")
+    session_id = item.get("session_id")
     if compaction.due(session_id, item.get("kind")) is None:
         return False
     try:
