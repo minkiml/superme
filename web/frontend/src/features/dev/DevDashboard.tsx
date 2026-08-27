@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, ArrowDown, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight, OctagonAlert, Lock, PackageCheck, type LucideIcon } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
-import { getDev, getAttention, resumeWorkItem, markWorkItemSeen, isShipped, type AttentionData, type AttentionRow, type DevData, type InboxEntry, type WorkItem } from '@/lib/api'
+import { getDev, getAttention, resumeWorkItem, markWorkItemSeen, isShipped, type AttentionData, type DevData, type InboxEntry, type WorkItem } from '@/lib/api'
 import { invalidate, useLive } from '@/lib/live'
 import { K, topicRepo } from '@/lib/live/keys'
 import { navigate, useRoute } from '@/lib/router'
@@ -251,51 +251,60 @@ const TIER_STYLE: Record<string, { dot: string; label: string }> = {
   unread: { dot: 'bg-accent', label: 'Unread' },
 }
 
-// One LANE per tier: a fixed-height row of cards that scrolls sideways. The strip's height is then
-// set by how many tiers are live — three or four — and never by how long a backlog gets.
-//
-// A card is square and small, so it carries only what picks an item out of its neighbours: the
-// title, and the one word for what it is waiting on (the gate for `needs you`, the outcome for a
-// closed one, the phase otherwise). The reason in full is the tooltip.
-
-function AttentionCard({ row, onOpen }: { row: AttentionRow; onOpen: (id: string) => void }) {
-  const foot = row.gate ?? row.outcome ?? row.phase ?? ''
-  return (
-    <button
-      onClick={() => onOpen(row.id)}
-      title={`${row.title} — ${row.reason}`}
-      className="flex size-24 shrink-0 snap-start flex-col justify-between rounded-lg border border-line bg-sunken p-2 text-left transition-colors hover:border-accent hover:bg-hover"
-    >
-      <span className="line-clamp-3 text-[11px] font-medium leading-tight text-fg">{row.title}</span>
-      {foot && (
-        <span className="truncate text-[9px] uppercase tracking-wide text-faint">{foot}</span>
-      )}
-    </button>
-  )
-}
+// A tier is unbounded: `needs_you` holds every item waiting on the owner, and nothing leaves it
+// until they act. Three per tier keeps the strip a strip; the count beside the label is the real
+// size, and the rest is one click away.
+const COLLAPSED = 3
 
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
+  const [ref, w] = useContainerWidth<HTMLDivElement>()
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  // Narrow, a row is one thing: WHICH item. The reason costs the most width and says the least.
+  const tight = w > 0 && w < PANE.narrow
   const tiers = (['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const)
     .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
     .filter((x) => x.rows.length > 0)
   if (tiers.length === 0) return null
   return (
-    <div className="min-w-0 space-y-2 rounded-xl border border-line bg-surface px-3 py-2.5">
-      {tiers.map(({ tier, rows }) => (
-        <div key={tier} className="min-w-0">
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            <span className={`h-2 w-2 rounded-full ${TIER_STYLE[tier].dot}`} />
-            {TIER_STYLE[tier].label}
-            <span className="tabular-nums text-faint">{rows.length}</span>
-          </div>
-          {/* `min-w-0` above and here is what makes this scroll instead of widening the page. */}
-          <div className="flex min-w-0 snap-x gap-1.5 overflow-x-auto pb-1 [scrollbar-color:rgb(var(--c-line))_transparent] [scrollbar-width:thin]">
-            {rows.map((r) => (
-              <AttentionCard key={r.id} row={r} onOpen={onOpen} />
+    <div ref={ref} className="space-y-1 rounded-xl border border-line bg-surface px-2.5 py-2">
+      {tiers.map(({ tier, rows }) => {
+        const open = expanded[tier] ?? false
+        const shown = open ? rows : rows.slice(0, COLLAPSED)
+        const hidden = rows.length - shown.length
+        return (
+          <div key={tier} className={`flex gap-x-2 gap-y-0.5 ${tight ? 'flex-col items-stretch' : 'flex-wrap items-center'}`}>
+            <span className={`flex shrink-0 items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-muted ${tight ? '' : 'w-[4.5rem]'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${TIER_STYLE[tier].dot}`} />
+              {TIER_STYLE[tier].label}
+              {/* Always: collapsed, this is the only place the real size shows. */}
+              <span className="tabular-nums text-faint">{rows.length}</span>
+            </span>
+            {shown.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => onOpen(r.id)}
+                title={`${r.title} — ${r.reason}`}
+                className={`truncate rounded border border-line bg-sunken px-1.5 py-px text-left text-[11px] leading-tight text-fg hover:bg-hover ${
+                  tight ? 'w-full' : 'max-w-[13rem]'
+                }`}
+              >
+                {r.title}
+                {!tight && <span className="ml-1 text-[9px] text-faint">{r.reason}</span>}
+              </button>
             ))}
+            {(hidden > 0 || open) && (
+              <button
+                onClick={() => setExpanded((e) => ({ ...e, [tier]: !open }))}
+                className={`shrink-0 rounded px-1 py-px text-[10px] text-muted hover:bg-hover hover:text-fg ${
+                  tight ? 'w-full text-left' : ''
+                }`}
+              >
+                {open ? 'less' : `+${hidden}`}
+              </button>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
