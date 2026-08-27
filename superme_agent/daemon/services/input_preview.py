@@ -265,7 +265,7 @@ def render_input_page(data: dict) -> str:
 
     block, body = _peel_turn_block(data.get("prompt_body", ""),
                                    [f for f in frags if f.get("channel") == TURN_CHANNEL])
-    block_title = "② Prompt body · session block — the phase pointer, restated every turn"
+    block_title = "② Prompt body · session block — the phase pointer, rebuilt and re-sent every turn"
     block_html = _render_section(block_title, block) if block else _gate_section(
         block_title, name="no session block on this run",
         note="This run sent no focus/guard block — a general session, or a capture taken before "
@@ -278,9 +278,12 @@ def render_input_page(data: dict) -> str:
     else:
         orient_html = _gate_section(
             orient_title, name="not injected on this run",
-            note="No orient block on this run: the birth-injected orientation is retired "
-                 "On a pre-retirement resumed session it sits earlier in the replayed "
-                 "transcript. Only the trigger below is new to this run.")
+            note="A phase run never carries one — this channel is written ONCE at session birth, "
+                 "and the only block still produced for it is a diagnosis session's subject "
+                 "activity-run trace (kernel_speech.diagnosis_trace_block), injected on the birth "
+                 "turn so later turns cache-read it. The older work-item orientation is retired "
+                 "and nothing writes it; a session predating that retirement replays it earlier "
+                 "in its transcript, not here.")
 
     trig_title = "④ Prompt body · user message / trigger — this run’s injected message"
     if m.get("is_gate"):
