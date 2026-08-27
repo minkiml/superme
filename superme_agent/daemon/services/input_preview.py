@@ -71,6 +71,7 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
     return {"meta": meta, "system_prompt": rec.get("system_prompt") or "",
             "system_fragments": system_fragments, "surface": surface,
             "skills": extras.get("skills") or [], "tools": extras.get("tools") or [],
+            "deferred_tools": extras.get("deferred_tools") or [],
             "prompt_body": rec.get("prompt_body") or ""}
 
 
@@ -241,7 +242,7 @@ def _render_surface(surface: dict | None) -> str:
     # widget.
     w = max(len(k) for k, _ in rows)
     text = "\n".join(f"{k.ljust(w)}   {v}" for k, v in rows)
-    return _render_section("⑦ Turn surface — what this run was ALLOWED to do", [{
+    return _render_section("⑧ Turn surface — what this run was ALLOWED to do", [{
         "name": "capability, not prose", "location": "daemon/services/runs.py · turn_surface()",
         "text": text}])
 
@@ -295,9 +296,11 @@ def render_input_page(data: dict) -> str:
         trig_html = _render_section(trig_title, [{
             "name": f"{m.get('phase', '?')} trigger message",
             "location": "core/kernel_speech.py · phase speech", "text": trig}])
-    # The authored channels that never arrive as a message: the skill enters the transcript, the
-    # tool docs ride every request.
+    # The authored channels that never arrive as a message. The skill enters the transcript; the
+    # tools do NOT — only their names ride in the prefix, and Claude Code holds the schemas until
+    # an agent fetches one with `ToolSearch`. Reported apart so the per-request total stays true.
     skills, tools = data.get("skills") or [], data.get("tools") or []
+    deferred = data.get("deferred_tools") or []
     skill_html = _render_section(
         "⑤ Phase skill — the procedure this run was told to invoke", skills) if skills else \
         _gate_section("⑤ Phase skill — the procedure this run was told to invoke",
@@ -306,11 +309,17 @@ def render_input_page(data: dict) -> str:
                            "capture time). The `references/` guides a skill cites are pulled on "
                            "demand and never appear here — they cost nothing unless read.")
     tools_html = _render_section(
-        "⑥ Tool docs — descriptions + parameter docs, sent with every request", tools) if tools else ""
-    body_html = (f"{block_html}{orient_html}{trig_html}{skill_html}{tools_html}"
+        "⑥ Tool names — the whole tool cost of a request; ~15 tok each", tools) if tools else ""
+    deferred_title = "⑦ Tool schemas — held by Claude Code, NOT in the prefix"
+    deferred_html = _render_section(deferred_title, deferred) if deferred else _gate_section(
+        deferred_title, name="not captured on this run",
+        note="A capture taken before the schemas were separated counted them under ⑥, which "
+             "overstated the per-request total roughly sixteenfold.")
+    body_html = (f"{block_html}{orient_html}{trig_html}{skill_html}{tools_html}{deferred_html}"
                  f"{_render_surface(data.get('surface'))}")
     # Summed from the very lists the cards render, so the total cannot disagree with them. Every
     # one of these rides in EVERY request of the run, which is why the total is the number to read.
+    # ⑦ is deliberately absent: a schema costs nothing until an agent asks for it.
     counted = [*sys_frags, *block, *(_fragment_orient(orient) if orient is not None else []),
                *([] if m.get("is_gate") else [{"text": trig}]), *skills, *tools]
     total = sum(len((f.get("text") or "").strip("\n")) for f in counted)

@@ -120,7 +120,9 @@ def _kind(prop: dict[str, Any]) -> str:
 def describe_specs(specs: list[ToolSpec]) -> str:
     """The authored tool surface as readable text, in mount order.
 
-    This is PROMPT TEXT, riding in every request, so a bloated description is visible as a cost."""
+    For READING, not for costing: Claude Code sends only the tool names and holds these schemas
+    until an agent fetches one with `ToolSearch`. A long description is paid by the run that asks
+    for it, not by every request."""
     blocks: list[str] = []
     for s in specs:
         schema = spec_schema(s)

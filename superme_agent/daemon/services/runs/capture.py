@@ -153,9 +153,12 @@ def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dic
 
 
 def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
-    """The prompt text SuperMe authors outside the system append: the phase SKILL.md and tool docs.
+    """The prompt text SuperMe authors outside the system append: the phase SKILL.md and its tools.
 
-    Both ride in every request, so they belong on the same page as the prose."""
+    The skill enters the transcript and is re-read every request. The tools are NOT: Claude Code
+    puts their NAMES in the prefix and holds the schemas server-side, so an agent that wants one
+    fetches it with `ToolSearch`. Measured at ~15 tokens per tool, against ~280 for its schema.
+    So the two are reported apart — only the names are charged to every request."""
     from ....harness.tools.base_tools import BASE_TOOLS
     from ....harness.tools.dev_tools import dev_tool_specs
     from ....harness.tools.registry import describe_specs
@@ -180,14 +183,18 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
     by_server = {"superme": BASE_TOOLS, "dev": dev_specs,
                  "run": [REPORT_COMPLETION_TOOL], "deputy": [SUBMIT_GATE_VERDICT_TOOL]}
     tools: list[dict] = []
+    deferred: list[dict] = []
     for server in sorted(set(mcp) | {"superme"}):
         specs = by_server.get(server)
         if not specs:
             continue
-        tools.append({"name": f"mcp__{server}__* — {len(specs)} tools",
+        tools.append({"name": f"mcp__{server}__* — {len(specs)} names",
                       "location": f"harness/tools · the `{server}` MCP server",
-                      "text": describe_specs(specs)})
-    return {"skills": skills, "tools": tools}
+                      "text": "\n".join(f"mcp__{server}__{s.name}" for s in specs)})
+        deferred.append({"name": f"mcp__{server}__* — {len(specs)} schemas",
+                         "location": f"harness/tools · the `{server}` MCP server",
+                         "text": describe_specs(specs)})
+    return {"skills": skills, "tools": tools, "deferred_tools": deferred}
 
 
 def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | None,

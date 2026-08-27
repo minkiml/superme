@@ -442,11 +442,46 @@ def test_lint() -> None:
     ok("no instruction-shaped strings outside the registry", not hits, str(hits))
 
 
+def test_tool_channel() -> None:
+    print("tool channel — the X-ray charges NAMES to the request, never the schemas")
+    from superme_agent.harness.tools.base_tools import BASE_TOOLS
+    from superme_agent.harness.tools.registry import describe_specs
+    from superme_agent.daemon.services.runs.capture import _authored_extras
+
+    class _Ctx:
+        pass
+
+    extras = _authored_extras(_Ctx(), {"kind": "implementation"}, "build", ["dev", "run"])
+    names = extras.get("tools") or []
+    schemas = extras.get("deferred_tools") or []
+    ok("both channels are populated", bool(names) and len(schemas) == len(names))
+
+    # Claude Code sends the names and holds the schemas, so the two must not be the same text.
+    # Before this split the X-ray put `describe_specs` under the counted channel and overstated
+    # every per-request total by roughly 16x.
+    name_chars = sum(len(f["text"]) for f in names)
+    schema_chars = sum(len(f["text"]) for f in schemas)
+    ok("names are far smaller than schemas", name_chars * 4 < schema_chars)
+    ok("no counted card carries a parameter doc",
+       not any("    · " in f["text"] or "\n    " in f["text"] for f in names))
+    ok("every counted line is a wire tool name",
+       all(ln.startswith("mcp__") for f in names for ln in f["text"].splitlines() if ln.strip()))
+    ok("the schema channel still renders the real docs",
+       any(describe_specs(BASE_TOOLS)[:40] in f["text"] for f in schemas))
+
+    src = Path("superme_agent/daemon/services/input_preview.py").read_text(encoding="utf-8")
+    ok("the total counts `tools` and not `deferred`",
+       "*skills, *tools]" in src and "*deferred]" not in src)
+    ok("the counted channel no longer claims to carry docs",
+       "Tool docs — descriptions + parameter docs" not in src)
+
+
 def main() -> None:
     test_run_protocol()
     test_triggers()
     test_runners_flip()
     test_channels()
+    test_tool_channel()
     test_skills()
     test_reader()
     test_snapshot()
