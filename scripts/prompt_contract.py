@@ -29,7 +29,7 @@ HOMES: dict[str, str | None] = {
     "core/knowledge_delta.py": "interjection",
     "core/git_layer.py": "interjection",
     "core/operational.py": "system",
-    "harness/plugins/superme-dev/forge_kit/eval.py": "trigger",
+    "harness/plugins/superme-dev/scripts/forge_kit/eval.py": "trigger",
     "daemon/services/deputy.py": "interjection",
 }
 # Agent-facing, but held to a different written contract. Not this gate's business.

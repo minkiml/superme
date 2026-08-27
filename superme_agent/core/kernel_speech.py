@@ -74,10 +74,11 @@ def session_checkpoint_trigger(memory_path: str) -> str:
 
 
 def vet_env_script() -> str:
-    """Absolute path to the vet skill's `vet_env.sh`, or "". The script lives in the
-    install, so nothing relative resolves."""
+    """Absolute path to the plugin's `vet_env.sh`, or "". It serves BOTH build and vet, so it is
+    the plugin's script rather than either skill's; and it lives in the install, so nothing
+    relative resolves."""
     from ..paths import DEV_PLUGIN_DIR
-    p = DEV_PLUGIN_DIR / "skills" / "vet" / "scripts" / "vet_env.sh"
+    p = DEV_PLUGIN_DIR / "scripts" / "vet_env.sh"
     return str(p) if p.is_file() else ""
 
 

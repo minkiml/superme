@@ -18,7 +18,7 @@ from superme_agent.paths import ASSET_DIR, DEV_PLUGIN_DIR, PLUGINS_DIR, SELF_FIL
 MAX_DESC = 1024
 # The judge reads from a throwaway cwd, so the shelf item cannot be the standard's only home.
 STANDARD_ASSET = ASSET_DIR / "authoring" / "skill-authoring.md"
-SKILL_PRINCIPLES = DEV_PLUGIN_DIR / "forge_kit" / "references" / "principle-for-skills.md"
+SKILL_PRINCIPLES = DEV_PLUGIN_DIR / "scripts" / "forge_kit" / "references" / "principle-for-skills.md"
 
 # Which scopes each skill runs under. Nothing else compares a skill's tools to its mount.
 SKILL_SCOPES: dict[str, tuple[str, ...]] = {

@@ -24,7 +24,7 @@ from ...paths import DEV_PLUGIN_DIR, CONSTITUTION_DIR
 
 log = logging.getLogger("superme-agent")
 
-FORGE_KIT = DEV_PLUGIN_DIR / "forge_kit"   # the forge agent's lint + behavioural-eval toolkit
+FORGE_KIT = DEV_PLUGIN_DIR / "scripts" / "forge_kit"   # the forge agent's lint + eval toolkit
 
 
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------
