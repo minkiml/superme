@@ -115,7 +115,7 @@ it starts — a plan handed an answer implements it, and never finds the better 
 
 ## Step 6 — Write the user-facing report
 
-Fill `templates/report-triage-template.md` and hand the whole body to `file_phase_report`. It owns
+Fill the report template your trigger carries and hand the whole body to `file_phase_report`. It owns
 the path and refuses a report with an unfilled slot left in it — never write the file yourself. It
 is the OWNER's — they accept or re-shape what you decided; the kernel and the plan phase read
 `brief.md`. A re-run overwrites it: the report always describes the item as it stands NOW.

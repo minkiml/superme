@@ -16,6 +16,7 @@ from scripts.sources import src
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from superme_agent.core import artifacts as _arts
 from superme_agent.core import kernel_speech as KS
 from superme_agent.harness.tools import run_tools as RT
 
@@ -112,6 +113,22 @@ def test_triggers() -> None:
     ok("close trigger names the close skill, the knowledge write, and mechanical clearance",
        "superme-dev:close" in cases["close"] and "apply_knowledge_edits" in cases["close"]
        and "the kernel clears the item" in cases["close"])
+    # The kernel counted before firing, so close must not spend a call confirming a known answer.
+    ok("close is told NOT to open the verification library when vet nominated nothing",
+       "do NOT call" in KS.close_trigger("it1", "T", nominated=0))
+    ok("…and IS told to open it when vet nominated something",
+       "read_verification_library" in (nom := KS.close_trigger("it1", "T", nominated=2))
+       and "do NOT call" not in nom)
+    ok("close is handed the merge commit rather than left to hunt for it",
+       "abc1234" in KS.close_trigger("it1", "T", merge_commit="abc1234"))
+    # Fetching the template cost a round trip in every measured run of these phases.
+    for _ph, _fire in (("triage", KS.intake_trigger("triage", "it1", "T")),
+                       ("build", KS.build_first_trigger("it1", "T")),
+                       ("close", KS.close_trigger("it1", "T"))):
+        ok(f"{_ph} trigger carries its report template verbatim",
+           _arts.skill_template(f"report-{_ph}").rstrip() in _fire)
+    ok("a phase whose report a pen derives carries no template",
+       KS.report_template_block("plan") == "" and KS.report_template_block("vet") == "")
     ok("resolve keeps the conflict procedure (task policy, not narration)",
        "conflict marker" in cases["resolve"] and "Do NOT run git commands" in cases["resolve"]
        and "honoring" in cases["resolve"])
@@ -242,10 +259,12 @@ def render_registry() -> dict[str, str]:
         # A FIXED path: the wording is the contract, and a baseline carrying this machine's
         # install location would fail everywhere else.
         "trigger.vet_env_note": KS.vet_env_note("/S/vet_env.sh"),
+        "trigger.build_first": KS.build_first_trigger("fix1", "Fixture"),
         "trigger.build_loop": KS.build_loop_trigger("fix1", "Fixture", 2, "REPORT"),
         "trigger.phase_feedback": KS.phase_feedback_trigger("fix1", "Fixture", "plan", "plan",
                                                             "feedback", "DIGEST"),
         "trigger.close": KS.close_trigger("fix1", "Fixture"),
+        "trigger.close.nominated": KS.close_trigger("fix1", "Fixture", nominated=2),
         "trigger.resolve": KS.resolve_trigger("/wt", "fix1", ["a.py", "b.py"]),
         "trigger.distill": KS.distill_trigger(),
         "trigger.write": KS.write_trigger(

@@ -13,13 +13,32 @@ from .vocab import kind_profiles, sandbox
 
 # triggers (durable user-messages — each opens one background run's transcript)
 
+# Phases whose report is one whole body the agent fills. Every measured run of one of these spent a
+# round trip fetching the template, so the trigger carries it. The FILE stays the single source.
+_REPORT_TEMPLATE_PHASES = ("triage", "build", "review", "close", "investigate")
+
+
+def report_template_block(phase: str) -> str:
+    """This phase's report template, verbatim, for its trigger to carry.
+
+    Empty for a phase whose report a pen derives rather than the agent writing whole."""
+    if phase not in _REPORT_TEMPLATE_PHASES:
+        return ""
+    body = artifacts.skill_template(f"report-{phase}").rstrip()
+    return (
+        f"\n\nYour report template, so you need not go looking for it. Fill every `<fill:…>` slot "
+        f"and hand the whole body to `file_phase_report`:\n\n```markdown\n{body}\n```"
+    )
+
+
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
     """The background intake run's message, durable. The delta is WHICH skill for WHICH item.
 
     `changed` names records rewritten since this phase's last run, which a resumed agent cannot
     recall."""
-    base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
+    base = (f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
+            f"{report_template_block(skill)}")
     if not changed:
         return base
     files = "\n".join(f"- `{f}`" for f in changed[:12])
@@ -49,21 +68,26 @@ def completion_nudge(skill: str) -> str:
     )
 
 
+# Both checkpoint triggers open on it, and a rule with two homes drifts in one.
+_COMPACTION_IMMINENT = ("This session is about to be compacted — its conversation will be replaced "
+                        "by a summary you did not write. ")
+
+
 def checkpoint_trigger(item_id: str) -> str:
     """The pre-compaction handoff turn · durable. The reason is load-bearing:
     without it the thread writes a status update."""
-    return (f"This session is about to be compacted — its conversation will be replaced by a "
-            f"summary you did not write. Run superme-dev:checkpoint for work-item `{item_id}` "
-            f"now, so what only this conversation knows survives.")
+    return (_COMPACTION_IMMINENT
+            + f"Run superme-dev:checkpoint for work-item `{item_id}` now, so what only this "
+              f"conversation knows survives.")
 
 
 def session_checkpoint_trigger(memory_path: str) -> str:
     """The same for a session with NO work-item. The path is named so the
     write lands inside the turn's permission scope."""
-    return (f"This session is about to be compacted — its conversation will be replaced by a "
-            f"summary you did not write. This session is not tied to a work-item, so run "
-            f"superme-dev:checkpoint and WRITE the result to `{memory_path}` (create or overwrite "
-            f"it), so what only this conversation knows survives.")
+    return (_COMPACTION_IMMINENT
+            + f"This session is not tied to a work-item, so run superme-dev:checkpoint and WRITE "
+              f"the result to `{memory_path}` (create or overwrite it), so what only this "
+              f"conversation knows survives.")
 
 
 def vet_env_script() -> str:
@@ -141,6 +165,7 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
         f"plan: work `artifacts/plan.md`'s `## Tasks` checklist and commit in the worktree. The "
         f"loop vets what you produce automatically — never advance the phase."
         + (vet_env_note(script) if vet_env and (script := vet_env_script()) else "")
+        + report_template_block("build")
     )
 
 
@@ -168,6 +193,7 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
         f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). {head} "
         f"what its report's `## Verification` entries describe:{found}\n\n"
         f"--- build-vet-{cycle}.md ---\n{report_text}\n---"
+        + report_template_block("build")
     )
 
 
@@ -194,16 +220,33 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
     )
 
 
-def close_trigger(item_id: str, title: str) -> str:
+def close_trigger(item_id: str, title: str, *, merge_commit: str | None = None,
+                  nominated: int = 0) -> str:
     """The auto-fired close run · durable. Review's exit locked code and git, so close's
-    whole job is knowledge."""
+    whole job is knowledge.
+
+    `merge_commit` and `nominated` are facts the kernel already holds; stating them saves close
+    the round trips it spent rediscovering them."""
+    # Close spent turns on `git log --grep` hunting for a sha the item record carries.
+    landed = (f" It merged as `{merge_commit}` — `git show --stat {merge_commit}` is the change "
+              f"inventory, so no searching for it." if merge_commit else "")
+    # Every measured close called `read_verification_library` even with nothing to fetch.
+    library = (
+        f"\n\nVet nominated {nominated} check(s) for the verification library: call "
+        f"`read_verification_library` and add each as an `append` op in the same "
+        f"`apply_knowledge_edits` call."
+        if nominated else
+        "\n\nVet nominated nothing for the verification library, so do NOT call "
+        "`read_verification_library` — there is nothing there for this item."
+    )
     return (
-        f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase. Run "
+        f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase.{landed} Run "
         f"superme-dev:close: reflect what LANDED into the general anchor docs through "
         f"`apply_knowledge_edits` (nothing doc-worthy ⇒ write nothing), then write "
         f"`reports/report-close.md` from the item's real artifacts + git — what landed, what the "
         f"anchor docs now say, what was skipped and why. Report when done; the kernel clears the "
         f"item from there."
+        + library + report_template_block("close")
     )
 
 
@@ -542,14 +585,18 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     return "\n".join(lines)
 
 
+# Both un-bound preambles carry it, because neither session may touch real code.
+_NO_REAL_CODE = ("do NOT implement or edit the project's real code, or mutate work-items in this "
+                 "session; that work happens inside a work-item.")
+
+
 def general_preamble() -> str:
     """Every interactive un-bound dev turn · per-turn. The advisor: discussion only,
     no code or work-item mutation."""
     return (
         "## General session\n"
         "This session is NOT tied to any work-item. You MAY author and maintain this project's `general/` "
-        "memory docs — routine anchor-doc upkeep happens here. But do NOT implement or edit the project's "
-        "real code, or mutate work-items, in this session; that work happens inside a work-item. When "
+        "memory docs — routine anchor-doc upkeep happens here. But " + _NO_REAL_CODE + " When "
         "implementation work surfaces, don't attempt it — offer to itemize it, and on the user's go-ahead "
         "run the create-inbox-item skill.\n"
         "**Reading is not implementing.** To answer a question about this project you may read anything "
@@ -588,9 +635,8 @@ def onboarding_preamble(mode: str | None = None) -> str:
         "message carries one, START FROM IT — grill from there, never re-ask what they just said. "
         "If it doesn't (they asked something else, or said nothing much), just ask for the one-liner "
         "and go. Authoring `general/` memory is exactly "
-        "what you're here to do. But do NOT implement or edit the project's real code, or mutate "
-        "work-items (no code writes, commits, installs, or migrations — including via shell); that's "
-        "for a work-item once the project is established. Keep the user in the loop — draft for "
+        "what you're here to do. But " + _NO_REAL_CODE + " (no code writes, commits, installs, or "
+        "migrations, including via shell). Keep the user in the loop — draft for "
         "approval, don't assume."
     )
 
@@ -626,143 +672,77 @@ def diagnosis_preamble(run: dict | None, run_id: int) -> str:
 
 # The dial moves ONLY this discretionary band; the refusal floor holds at every level.
 _DEPUTY_STRICTNESS = {
-    "low": "Maximum delegated autonomy. Approve on your own when vet's coverage is reasonable; "
+    "low": "Maximum delegated autonomy. Approve on your own when vet's coverage is reasonable, and "
            "handle gaps by sending back. Escalate ONLY for decisions the mandate reserves for the "
-           "owner and items you genuinely cannot unblock. Act as the owner would on a good day — "
+           "owner and items you genuinely cannot unblock. Act as the owner would on a good day, "
            "decisively.",
     "medium": "Approve on your own when vet's coverage is solid. Also escalate genuinely ambiguous, "
-              "high-stakes calls — but only after you have tried to settle them yourself.",
+              "high-stakes calls, but only after you have tried to settle them yourself.",
     "high": "Approve alone only when vet clearly establishes the deliverable's success signal. "
             "Escalate anything where the owner personally running it would add real signal beyond "
             "what vet covered.",
     "extra": "Most conservative. Approve alone only for plumbing where nothing is exercisable and "
-             "vet is airtight. When you are in real doubt whether the owner would want to see it, "
-             "escalate — but only after resolving what you can yourself (this is not licence to "
-             "page eagerly; see Resolve first).",
+             "vet is airtight. When you are in doubt whether the owner would want to see it, "
+             "escalate, but only after resolving what you can yourself. This is not licence to "
+             "page eagerly. See Resolve first.",
 }
 DEPUTY_STRICTNESS_LEVELS = tuple(_DEPUTY_STRICTNESS)
 DEPUTY_STRICTNESS_DEFAULT = "medium"
 
 
 def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
-    """Every deputy dispatch · one-shot. `strictness` tunes ONLY the escalation band;
-    the floor is level-invariant."""
-    if strictness not in _DEPUTY_STRICTNESS:   # defence in depth — the setting is validated too
+    """Every deputy dispatch · one-shot. The FRAME and the floor only.
+
+    The procedure is the `superme-dev:deputy` skill, named in the dispatch. Written in the plain
+    style the verdict owes, because the reader copies the text before it parses the rule."""
+    if strictness not in _DEPUTY_STRICTNESS:   # defence in depth, the setting is validated too
         strictness = DEPUTY_STRICTNESS_DEFAULT
     band = _DEPUTY_STRICTNESS[strictness]
     return (
         "## Deputy\n"
-        "You are the owner's DEPUTY agent at one gate of one autopiloted work-item. The owner is away and "
-        "your goal is to act on owner's behalf. Make the call a careful owner would make — NOT "
-        "to keep work moving (that is autopilot's job; yours is judgment). If you approve work that "
-        "wasn't ready, you are worse than useless: you removed the one safeguard autopilot took "
-        "away.\n\n"
-        
-        "You are a FRESH session, minted for this one gate. You did not build this and you never saw "
-        "the build conversation — your independence is the entire reason you exist (the same "
-        "discipline vet runs under: it forgets between cycles). You judge from artifacts, not from "
-        "the builder's account of them. Your only memory is the decision log in the prompt; your "
-        "only trace forward is the verdict you emit.\n\n"
-        
-        "### Where you act — gates only\n"
-        "You act at exactly the points a human would: **triage-exit, plan, review**. You are NOT "
-        "present in the build⟷vet loop and never interrupt it — build finishes untouched, vet runs "
-        "its functionality checks, they loop with nobody in the middle. You judge only what arrives "
-        "at a gate.\n\n"
-        
-        "### Your decision — one of three\n"
-        "- **approve** — the work meets the bar; advance.\n"
-        "- **send_back** — a specific, fixable gap. Your `change` is posted into the work-item and "
-        "routes it back through build⟷vet for the fix + re-validation. You do not fix anything and "
-        "you do not converse mid-loop — you state the change and it comes back to you. PREFER this "
-        "over escalate whenever the build/vet agents can close the gap without the owner.\n"
-        "- **escalate** — page the owner. For what genuinely needs THEM: a decision the mandate "
-        "reserves, or a confirmation only their own hands can give.\n"
-        "You may NOT drop, abandon, or supersede work — you have no such move, by design. Ending "
-        "work is the owner's alone.\n\n"
+        "You are the owner's deputy at one gate of one autopiloted work-item. The owner is away. "
+        "Make the call a careful owner would make. Keeping work moving is autopilot's job. Yours "
+        "is judgment, and approving work that was not ready removes the last safeguard.\n"
+        "You are a fresh session. You never saw the build conversation, so judge from the "
+        "artifacts and never from the builder's account of them. Your only memory is the decision "
+        "log in your dispatch.\n"
+        "The procedure is the `superme-dev:deputy` skill. Run it.\n\n"
 
-        "**Authorization requests (review only).** The build may have DEFERRED a change to what "
-        "the project INTENDS; the pending requests are listed in your brief. You may NOT grant "
-        "one, however obviously right it looks — **escalate**. Every scope is the owner's alone, "
-        "and there is no verdict field that grants one.\n\n"
-        
-        "### Procedure\n"
-        "1. Read the decision log, then the mandate, then the gate brief — orient before you judge.\n"
-        "2. Inspect the artifacts the brief points at (Read/Grep) — at **review**, read the vet "
-        "results too. Form your own view; the brief says where to look, not what to conclude.\n"
-        "3. Judge against the bar for this gate:\n"
-        "   - **triage-exit** — is this real, well-scoped work of the right kind? Mis-scoped / a "
-        "duplicate / not worth doing → send_back; a decision the mandate reserves → escalate.\n"
-        "   - **plan** — read `plan.md`. Approach sound, tasks the right decomposition, risks named? "
-        "A plan you'd bounce is a send_back. Escalate only if it turns on an owner-reserved "
-        "decision.\n"
-        "   - **review** — human review is not reading code, it is RUNNING the thing. You cannot run "
-        "it, and vet already ran real functionality checks — so do not escalate merely because "
-        "something is exercisable. Read the build result AND the vet results, then ask: *given what "
-        "vet already validated, is there anything left that the owner personally running it would "
-        "add?* No (vet's coverage is solid, nothing high-stakes) → approve. A fixable gap vet missed "
-        "→ send_back. Something only a human can confirm — UX feel, a high-stakes behaviour, an "
-        "ambiguous call, OR a critical/testable success signal vet could not fully establish → "
-        "escalate with a concrete runbook.\n"
-        "   On a RESEARCH item the brief's `owner_rulings` may say proposals are waiting on the "
-        "owner. That is the designed resting state, not a gap: judge the investigation, and "
-        "approve or send back on ITS merits. Never send back to make the questions go away and "
-        "never escalate just because they exist — an unruled proposal simply does not get filed. "
-        "You may not answer one, at any strictness and under any delegated authority: a ruling on "
-        "what this codebase keeps is the owner's alone.\n"
-        "   If `owner_rulings` instead says approving would RECORD A STANDING RULE, escalate and "
-        "quote the rule. The owner ruled on one question; the sentence generalising that ruling was "
-        "written by an agent, it is appended to an append-only ledger nobody prunes, and every "
-        "later phase reads it before asking anything — so an over-broad one silently suppresses "
-        "questions that should have reached the owner. Approving is not yours here even at low "
-        "strictness, and this is not delegable.\n"
-        "4. Decide — exactly one — and record why in your verdict's `because` in absolutely"
-        " concise, clear, and plain words with less than 20 words \n\n"
+        "### Your decision, one of three\n"
+        "- **approve.** The work meets the bar. Advance it.\n"
+        "- **send_back.** A specific, fixable gap. Your `change` is posted to the item and routes "
+        "it back through build and vet for the fix and its re-validation. You do not fix anything "
+        "and you do not converse mid-loop. Prefer this over escalate whenever build and vet can "
+        "close the gap without the owner.\n"
+        "- **escalate.** Page the owner, for a decision the mandate reserves or a confirmation "
+        "only their own hands can give.\n"
+        "You may not drop, abandon, or supersede work. Ending work is the owner's alone.\n"
+        "You may not grant an authorization request, however obviously right it looks. Escalate "
+        "it. Every scope is the owner's, and no verdict field grants one.\n\n"
 
-        "### Escalating — three parts, and two of them are LISTS\n"
-        "`user.escalation` is the card a paged owner reads cold, often on a phone, deciding "
-        "whether to stop what they are doing. Give it as parts, never as prose:\n"
-        "- `summary` — ONE plain line: what is going on. Not the item title again.\n"
-        "- `concerns` — a LIST, one short concise line per concern, each standing alone.\n"
-        "- `what_to_do` — a LIST, one short concise line per option or step: the exact command or "
-        "click path and what they should see, or, for a decision, each option with your "
-        "recommendation marked.\n"
-        "The kernel renders the layout; you supply the parts. A paragraph in a list field is "
-        "the one thing this shape exists to prevent.\n"
-        "**How to write the lines.** Plain words, short sentences, one idea each. Say the thing "
-        "and stop. No em dashes, no semicolons, and no colons mid-sentence to introduce a clause "
-        "- start a new sentence instead. No hedging and no throat-clearing. Write the way you "
-        "would tell a colleague who is standing next to you.\n\n"
-        
-        "### When you must NOT approve — the floor (holds at EVERY strictness level)\n"
-        "- **Not affirmatively convinced → do not approve.** Under doubt, withhold: send back or "
-        "escalate. \"Looks fine\" is not \"is fine\" (vet's own discipline: default to refuted).\n"
-        "- **You could not name what you checked → do not approve.** Every approval must state "
-        "concretely what you inspected and why it convinced you. A paraphrase of the brief means you "
-        "rubber-stamped — go back to step 2.\n"
-        "- **The artifacts don't stand alone → send_back.** If you'd need the build transcript to "
-        "decide, the artifacts are incomplete. That is the finding.\n"
-        "- **A required artifact is missing, stale, or fails its own self-check → send_back.**\n"
-        "- **A success signal only the owner can confirm, that vet did not cover → escalate** with a "
-        "runbook (what to open/run, what they should see, the PRD signal verbatim). If vet DID "
-        "establish it, approve — don't re-summon.\n"
-        "- **It touches something the mandate marks owner-only → escalate**, however obvious it "
-        "seems.\n\n"
-        
-        "### Your strictness — " + strictness + "\n"
+        "### When you must not approve, at every strictness\n"
+        "- **Not affirmatively convinced.** Withhold. Send back or escalate. \"Looks fine\" is not "
+        "\"is fine\".\n"
+        "- **You could not name what you checked.** Every approval states what you inspected and "
+        "why it convinced you. A paraphrase of the brief means you rubber-stamped.\n"
+        "- **The artifacts do not stand alone.** Needing the build transcript to decide means the "
+        "artifacts are incomplete. That is the finding. Send back.\n"
+        "- **A required artifact is missing, stale, or fails its own self-check.** Send back.\n"
+        "- **A success signal only the owner can confirm, that vet did not cover.** Escalate with "
+        "a runbook. If vet did establish it, approve rather than re-summon them.\n"
+        "- **The mandate marks it owner-only.** Escalate, however obvious it seems.\n\n"
+
+        "### Your strictness, " + strictness + "\n"
         + band + "\n"
-        "This tunes only how readily you reach for the owner; it does NOT relax the floor above. "
-        "**Resolve first, at every level including extra:** escalation is a considered last resort, "
-        "never a reflex for \"I'm not sure.\" Before you ever page the owner you must have read the "
-        "artifacts and vet results in full, reasoned the concern through, and — if it's fixable — "
-        "sent it back instead. Your existence is meant to REDUCE how often the owner is pulled in; a "
-        "deputy that reaches for them whenever a call is non-trivial has failed its one job. Then "
-        "escalate only what survives your own analysis and genuinely needs them — without "
-        "hesitation.\n\n"
+        "This tunes how readily you reach for the owner. It does not relax the floor above. "
+        "Resolve first, at every level. Before you page the owner you must have read the artifacts "
+        "and vet results in full, reasoned the concern through, and sent it back instead if it was "
+        "fixable. You exist to reduce how often the owner is pulled in. Then escalate what survives "
+        "your own analysis without hesitation.\n\n"
 
         "### Your verdict\n"
-        "End by calling the `submit_gate_verdict` tool, once. After the call, say nothing beyond one "
-        "short closing line."
+        "End by calling `submit_gate_verdict` once, then say nothing beyond one short closing "
+        "line."
     )
 
 
@@ -839,7 +819,8 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
 
     THE DEPUTY READS WHAT THE OWNER READS, AND NEVER THE OWNER'S DECISION — a judge handed a verdict
     judges the verdict."""
-    parts = [f"You are judging the **{gate}** gate of work-item `{item_id}` — \"{title}\".", ""]
+    parts = [f"Run superme-dev:deputy to judge the **{gate}** gate of work-item `{item_id}` "
+             f"(\"{title}\").", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
               _cap(mandate or "", _DEPUTY_MANDATE_CAP)
               or "_(no mandate authored yet — judge to the general deputy floor and lean "

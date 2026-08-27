@@ -182,7 +182,7 @@ re-asking one spends a decision they already made.
 
 ## 7 · Write the report and bank a checkpoint
 
-Fill `templates/report-investigate-template.md` and hand the whole body to
+Fill the report template your trigger carries and hand the whole body to
 `file_phase_report`. It owns the path and refuses a report with an unfilled slot left in it —
 never write the file yourself. Then bank a `write_checkpoint`: which questions are answered, which
 are open, where to pick up.

@@ -1219,12 +1219,14 @@ ok("a MALFORMED ruling field fails the row — the owner cannot answer terms tha
 ok("`owner_rulings` is in the review gate's blocking set, so the malformed case greys Approve",
    "owner_rulings" in _gb._BLOCKING["review"])
 
-_DEPUTY = src("superme_agent/core/kernel_speech.py")
-ok("the deputy is told an outstanding owner ruling is the designed resting state, not a gap — "
+# The rule is the deputy's PROCEDURE, so it lives in its skill; the preamble carries only the
+# floor that bounds the session. Assert the rule, not which file happens to hold it.
+_DEPUTY = src("superme_agent/harness/plugins/superme-dev/skills/deputy/SKILL.md")
+ok("the deputy is told an outstanding owner ruling is the resting state, not a gap — "
    "without this it send_backs to clear a question it may not answer, forever",
-   "designed resting state, not a gap" in _DEPUTY)
-ok("…and that no strictness or delegated authority lets it answer one",
-   "under any delegated authority" in _DEPUTY)
+   "resting state, not a gap" in _DEPUTY)
+ok("…and that no strictness lets it answer one",
+   "may not answer one at any strictness" in _DEPUTY)
 ok("the deputy holds no tool that could write an answer into the record",
    set(_dt.TOOL_SCOPES["deputy"]) == {"read_dev_log", "read_run"})
 
@@ -1431,16 +1433,15 @@ ok("the approve path is where a rule is recorded, beside the itemize it feeds",
 ok("…and only an OWNER approve records one — the owner ruled on the question, but an AGENT wrote "
    "the sentence generalising it, and no later reader can tell the difference",
    'if actor == "owner":' in _GATES)
-# Read the RENDERED preamble: the source stores adjacent literals, so a grep matches on where the
-# author broke the line.
 from superme_agent.core import kernel_speech as _ks                       # noqa: E402
-_DEPUTY = _ks.deputy_preamble("high")
 ok("the deputy is told to escalate rather than approve a review that would record a rule, and to "
    "quote it — the owner cannot refuse a sentence they were never shown",
    "escalate and quote the rule" in _DEPUTY and "not delegable" in _DEPUTY)
+# The rule sits in the skill, which one dispatch loads whatever its band, so band-independence is
+# structural. What the BANDS must not do is soften it — assert that instead.
 ok("…at every strictness, so a low-strictness deputy does not quietly become the one who decides "
    "what this project remembers",
-   all("escalate and quote the rule" in _ks.deputy_preamble(s)
+   all("does not relax the floor" in _ks.deputy_preamble(s)
        for s in ("low", "medium", "high")))
 
 print("\n— the line that SUMMONS the owner, not just the one inside the item —")

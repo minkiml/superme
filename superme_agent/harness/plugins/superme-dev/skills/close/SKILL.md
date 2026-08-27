@@ -66,16 +66,19 @@ refusal is itemized and writes nothing; fix the named op and call again.
   where that becomes a doc change. A DENIED one leaves a known gap: skip it, and name it in step 3.
 - **Nothing doc-worthy? Call nothing.** A no-op close is a real outcome, and step 3 says so.
 
-**Whatever vet nominated for the verification library** goes in the same call.
-`read_verification_library(item_id)` returns this repo's library plus any nomination from this item,
-rendered as a ready entry: add each as one `append` op on doc `verification`, section `Available` —
-verbatim, unless it still names something item-specific, in which case restate it about the repo.
-Entries land as available; only the owner promotes one to standing. Most items nominate nothing, and
-an entry added to look productive taxes every later plan that reads it.
+**Whatever vet nominated for the verification library** goes in the same call — and **your trigger
+says whether there is anything.** It counted before you were fired, so when it says vet nominated
+nothing, there is nothing: do not call `read_verification_library` to confirm an answer you already
+have. When it names a count, `read_verification_library(item_id)` returns this repo's library plus
+this item's nominations, rendered as ready entries: add each as one `append` op on doc
+`verification`, section `Available` — verbatim, unless it still names something item-specific, in
+which case restate it about the repo. Entries land as available; only the owner promotes one to
+standing. Most items nominate nothing, and an entry added to look productive taxes every later plan
+that reads it.
 
 ## Step 3 — Write the user-facing report
 
-Fill `templates/report-close-template.md` and hand the whole body to `file_phase_report`. It owns
+Fill the report template your trigger carries and hand the whole body to `file_phase_report`. It owns
 the path and refuses a report with an unfilled slot left in it — never write the file yourself. This
 is the last thing the owner reads about this item, and what they will find if they come back to it in
 six months.

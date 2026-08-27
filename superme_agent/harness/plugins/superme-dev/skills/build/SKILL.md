@@ -181,7 +181,7 @@ a raw diff — name files, how to exercise the change, and every gap honestly.
 
 ### 4c — Write the user-facing report
 
-Fill `templates/report-build-template.md` and hand the whole body to `file_phase_report`. It owns
+Fill the report template your trigger carries and hand the whole body to `file_phase_report`. It owns
 the path, overwrites, and refuses a report with an unfilled slot left in it — never write the file
 yourself. Every line traces to the cycle reports. It always describes the work as it stands NOW, so the round history
 goes in the `**Summary:**` line and nowhere else ("Done, after three rounds — the empty-ledger case
