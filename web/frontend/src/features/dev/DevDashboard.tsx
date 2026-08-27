@@ -251,8 +251,13 @@ const TIER_STYLE: Record<string, { dot: string; label: string }> = {
   unread: { dot: 'bg-accent', label: 'Unread' },
 }
 
+// A tier is unbounded: `needs_you` holds every item waiting on the owner, and nothing leaves it
+// until they act. Collapsed, the strip stays a strip; the count beside the label is the real size.
+const COLLAPSED = { tight: 3, wide: 8 }
+
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
   const [ref, w] = useContainerWidth<HTMLDivElement>()
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   // Narrow, a row is one thing: WHICH item. The reason costs the most width and says the least.
   const tight = w > 0 && w < PANE.narrow
   const tiers = (['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const)
@@ -261,14 +266,19 @@ function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: st
   if (tiers.length === 0) return null
   return (
     <div ref={ref} className="space-y-1.5 rounded-xl border border-line bg-surface px-3 py-2.5">
-      {tiers.map(({ tier, rows }) => (
+      {tiers.map(({ tier, rows }) => {
+        const open = expanded[tier] ?? false
+        const shown = open ? rows : rows.slice(0, tight ? COLLAPSED.tight : COLLAPSED.wide)
+        const hidden = rows.length - shown.length
+        return (
         <div key={tier} className={`flex gap-x-3 gap-y-1 ${tight ? 'flex-col items-stretch' : 'flex-wrap items-center'}`}>
           <span className={`flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted ${tight ? '' : 'w-20'}`}>
             <span className={`h-2 w-2 rounded-full ${TIER_STYLE[tier].dot}`} />
             {TIER_STYLE[tier].label}
-            {tight && <span className="tabular-nums text-faint">{rows.length}</span>}
+            {/* Always: collapsed, this is the only place the real size shows. */}
+            <span className="tabular-nums text-faint">{rows.length}</span>
           </span>
-          {rows.map((r) => (
+          {shown.map((r) => (
             <button
               key={r.id}
               onClick={() => onOpen(r.id)}
@@ -281,8 +291,19 @@ function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: st
               {!tight && <span className="ml-1.5 text-[10px] text-faint">{r.reason}</span>}
             </button>
           ))}
+          {(hidden > 0 || open) && (
+            <button
+              onClick={() => setExpanded((e) => ({ ...e, [tier]: !open }))}
+              className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] text-muted hover:bg-hover hover:text-fg ${
+                tight ? 'w-full text-left' : ''
+              }`}
+            >
+              {open ? 'show fewer' : `+${hidden} more`}
+            </button>
+          )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
