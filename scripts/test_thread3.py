@@ -122,13 +122,18 @@ def test_triggers() -> None:
     ok("close is handed the merge commit rather than left to hunt for it",
        "abc1234" in KS.close_trigger("it1", "T", merge_commit="abc1234"))
     # Fetching the template cost a round trip in every measured run of these phases.
+    # A template is part of its skill's PACKAGE. A trigger that carries the body puts skill content
+    # in the user message and pays for it on every request of the run.
     for _ph, _fire in (("triage", KS.intake_trigger("triage", "it1", "T")),
                        ("build", KS.build_first_trigger("it1", "T")),
                        ("close", KS.close_trigger("it1", "T"))):
-        ok(f"{_ph} trigger carries its report template verbatim",
-           _arts.skill_template(f"report-{_ph}").rstrip() in _fire)
-    ok("a phase whose report a pen derives carries no template",
-       KS.report_template_block("plan") == "" and KS.report_template_block("vet") == "")
+        tpl = f"templates/report-{_ph}-template.md"
+        body = (SKILLS / _ph / tpl).read_text(encoding="utf-8")
+        ok(f"{_ph} trigger carries the delta, not the report template",
+           "```markdown" not in _fire and body.strip().splitlines()[0] not in _fire,
+           f"{len(_fire)}c")
+        ok(f"{_ph}'s skill names its own report template",
+           tpl in (SKILLS / _ph / "SKILL.md").read_text(encoding="utf-8"))
     ok("resolve keeps the conflict procedure (task policy, not narration)",
        "conflict marker" in cases["resolve"] and "Do NOT run git commands" in cases["resolve"]
        and "honoring" in cases["resolve"])

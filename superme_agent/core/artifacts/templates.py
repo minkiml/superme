@@ -25,13 +25,8 @@ _TEMPLATE_HOMES = {
     "report-plan":          ("plan", "report-plan-template.md"),
     "report-plan-research": ("plan", "report-plan-research-template.md"),
     "report-vet":           ("vet", "report-vet-template.md"),
-    # The whole-body reports. Registered so a phase's TRIGGER can carry the template: fetching it
-    # cost a round trip on every run measured, and the body is smaller than the turn it cost.
-    "report-triage":      ("triage", "report-triage-template.md"),
-    "report-build":       ("build", "report-build-template.md"),
-    "report-review":      ("review", "report-review-template.md"),
-    "report-close":       ("close", "report-close-template.md"),
-    "report-investigate": ("investigate", "report-investigate-template.md"),
+    # Only the reports a PEN derives are registered. A report the agent writes whole is named by
+    # its own skill and read from there — the template is the skill's, not the loader's.
 }
 _template_cache: dict[str, str] = {}
 

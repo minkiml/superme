@@ -15,30 +15,13 @@ from .vocab import kind_profiles, sandbox
 
 # Phases whose report is one whole body the agent fills. Every measured run of one of these spent a
 # round trip fetching the template, so the trigger carries it. The FILE stays the single source.
-_REPORT_TEMPLATE_PHASES = ("triage", "build", "review", "close", "investigate")
-
-
-def report_template_block(phase: str) -> str:
-    """This phase's report template, verbatim, for its trigger to carry.
-
-    Empty for a phase whose report a pen derives rather than the agent writing whole."""
-    if phase not in _REPORT_TEMPLATE_PHASES:
-        return ""
-    body = artifacts.skill_template(f"report-{phase}").rstrip()
-    return (
-        f"\n\nYour report template, so you need not go looking for it. Fill every `<fill:…>` slot "
-        f"and hand the whole body to `file_phase_report`:\n\n```markdown\n{body}\n```"
-    )
-
-
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
     """The background intake run's message, durable. The delta is WHICH skill for WHICH item.
 
     `changed` names records rewritten since this phase's last run, which a resumed agent cannot
     recall."""
-    base = (f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
-            f"{report_template_block(skill)}")
+    base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
     if not changed:
         return base
     files = "\n".join(f"- `{f}`" for f in changed[:12])
@@ -165,7 +148,6 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
         f"plan: work `artifacts/plan.md`'s `## Tasks` checklist and commit in the worktree. The "
         f"loop vets what you produce automatically — never advance the phase."
         + (vet_env_note(script) if vet_env and (script := vet_env_script()) else "")
-        + report_template_block("build")
     )
 
 
@@ -193,7 +175,6 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
         f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). {head} "
         f"what its report's `## Verification` entries describe:{found}\n\n"
         f"--- build-vet-{cycle}.md ---\n{report_text}\n---"
-        + report_template_block("build")
     )
 
 
@@ -246,7 +227,7 @@ def close_trigger(item_id: str, title: str, *, merge_commit: str | None = None,
         f"`reports/report-close.md` from the item's real artifacts + git — what landed, what the "
         f"anchor docs now say, what was skipped and why. Report when done; the kernel clears the "
         f"item from there."
-        + library + report_template_block("close")
+        + library
     )
 
 

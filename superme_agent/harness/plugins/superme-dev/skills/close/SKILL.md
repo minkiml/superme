@@ -78,7 +78,8 @@ that reads it.
 
 ## Step 3 — Write the user-facing report
 
-Fill the report template your trigger carries and hand the whole body to `file_phase_report`. It owns
+Read `templates/report-close-template.md`, fill every `<fill:…>` slot, and hand the whole
+body to `file_phase_report`. It owns
 the path and refuses a report with an unfilled slot left in it — never write the file yourself. This
 is the last thing the owner reads about this item, and what they will find if they come back to it in
 six months.

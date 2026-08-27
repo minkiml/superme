@@ -30,7 +30,7 @@ Covers the skill file and every file packaged alongside it.
   | `scripts/` | deterministic code run locally to check or modify the environment |
   | `assets/` | lazy-loaded static files and supporting resources |
 
-  Everything below `SKILL.md` is optional. Add one only where it makes the skill better; do not
+  Everything below `SKILL.md` is optional to be referenced/utilized by the main `SKILL.md`. Add one only where it makes the skill better; do not
   over-engineer with them.
 
 - **Number the steps in execution order**, and if the skill ships a copy-this checklist, make it

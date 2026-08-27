@@ -3867,9 +3867,6 @@
   "_PHASE_CONTRACTS": {
    "sig": "value:dict"
   },
-  "_REPORT_TEMPLATE_PHASES": {
-   "sig": "value:tuple"
-  },
   "_TRACE_KINDS": {
    "sig": "value:set"
   },
@@ -3972,10 +3969,6 @@
   "render_handoff_block": {
    "home": "superme_agent.core.kernel_speech",
    "sig": "def(item: dict, item_dir: pathlib.Path) -> tuple[str | None, int]"
-  },
-  "report_template_block": {
-   "home": "superme_agent.core.kernel_speech",
-   "sig": "def(phase: str) -> str"
   },
   "resolve_trigger": {
    "home": "superme_agent.core.kernel_speech",

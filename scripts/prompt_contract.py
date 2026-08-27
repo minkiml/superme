@@ -211,26 +211,12 @@ def rendered() -> dict[str, str]:
     return render_registry()
 
 
-def payload_free(text: str) -> str:
-    """`text` minus any verbatim artifact template it carries.
-
-    The ceilings cap AUTHORED prose. A template a trigger injects so the agent need not spend a
-    round trip fetching it is data, governed by its own file, and charging the trigger for it would
-    price the saving as a breach."""
-    from superme_agent.core import kernel_speech as _ks
-    for phase in _ks._REPORT_TEMPLATE_PHASES:
-        block = _ks.report_template_block(phase)
-        if block and block in text:
-            text = text.replace(block, "")
-    return text
-
-
 def check_ceilings(units, registry) -> None:
     """Size against the layer's ceiling — rendered where a rendering exists, authored otherwise."""
     for key, text in sorted(registry.items()):
         layer = REGISTRY_LAYER.get(key.split(".")[0])
         cap = CEILING.get(layer)
-        prose = payload_free(text)
+        prose = text
         if cap and len(prose) > cap:
             fail(key, f"over the {layer} ceiling", f"{len(prose)}c rendered prose, cap {cap}")
     for key, (layer, text) in sorted(units.items()):
@@ -276,20 +262,6 @@ def check_duplication(units) -> None:
 # An injected template rides EVERY turn, so it only beats a one-off read while it stays small.
 # Break-even is roughly template x turns-before-it-is-needed vs one turn's context; 4,000c keeps a
 # wide margin at the ~15-turn mark where reports get written.
-TEMPLATE_CEILING = 4_000
-
-
-def check_injected_templates() -> None:
-    """A template the ceilings excuse must stay small enough to be worth injecting."""
-    from superme_agent.core import artifacts as _arts
-    from superme_agent.core import kernel_speech as _ks
-    for phase in _ks._REPORT_TEMPLATE_PHASES:
-        body = _arts.skill_template(f"report-{phase}")
-        if len(body) > TEMPLATE_CEILING:
-            fail(f"template.report-{phase}", "too big to inject into every turn",
-                 f"{len(body)}c, cap {TEMPLATE_CEILING} — read it in the skill instead")
-
-
 def main() -> None:
     units = prompt_units()
     registry = rendered()
@@ -298,7 +270,6 @@ def main() -> None:
     check_ceilings(units, registry)
     check_self_consistency(units)
     check_duplication(units)
-    check_injected_templates()
 
     by_layer = collections.Counter(layer for layer, _ in units.values())
     print(f"  {len(units)} prompts in {len(HOMES)} homes — "

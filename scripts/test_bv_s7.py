@@ -943,13 +943,12 @@ def test_contracts() -> None:
     ok("...and the naming carries a LABELLED example", "**Good example**" in flat)
     # The owner's report is KIND-NEUTRAL: the questions a person asks before approving do not
     # change with the workflow.
-    # The skill no longer names the file — the trigger carries the body — so assert the template
-    # itself: one kind-neutral shape, and it is what a review run is actually handed.
-    from superme_agent.core import artifacts as _a
-    from superme_agent.core import kernel_speech as _k
+    # The template is the skill's own package again, so the skill NAMES it: one kind-neutral
+    # shape, cited once, and no per-kind variant beside it.
     ok("...and one owner report template serves every kind, with no second review skill",
-       _a.skill_template("report-review").rstrip()
-       in _k.intake_trigger("review", "it1", "T")
+       "templates/report-review-template.md" in flat
+       and Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/"
+                "report-review-template.md").is_file()
        and not Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/"
                     "report-review-research-template.md").exists()
        and not Path("superme_agent/harness/plugins/superme-dev/skills/"
