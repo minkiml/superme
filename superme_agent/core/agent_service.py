@@ -180,38 +180,42 @@ class AgentService:
         """Where this turn is operating: host, cwd, knowledge roots, and the orientation digest.
 
         A lookup table, not prose: every line rides every turn and the reader needs a path."""
-        where = ("the **SuperMe hub** (the owner's home host: their cross-domain self, and "
-                 "SuperMe's own codebase)" if ctx.layer == "global" else f"project host `{ctx.id}`")
-        text = (
-            f"\n\n## Operating context\n"
-            f"Host: {where} · context `{ctx.label}` · cwd `{ctx.cwd}`.\n"
-            # Skills name a tool bare. Looking one up under that name misses, and the fallback
-            # keyword search costs several more round-trips.
-            f"SuperMe's own tools are namespaced `mcp__<server>__<tool>`. Prompts and skills name "
-            f"them bare, so add the namespace when you look one up rather than searching the bare "
-            f"name."
-        )
+        where = ("the **SuperMe hub** — the owner's home host: their cross-domain self, and "
+                 "SuperMe's own codebase" if ctx.layer == "global" else f"project host `{ctx.id}`")
+        # One labelled line per fact. Run together with `·` these read as prose and are scanned as
+        # prose, and the one the reader came for is a path in the middle of a sentence.
+        rows = [("host", where), ("context", f"`{ctx.label}`"), ("cwd", f"`{ctx.cwd}`")]
         # ABSOLUTE paths: the knowledge trees do not live under the cwd, so relative ones silently
         # miss.
         if ctx.internal_root:
             core_root = ctx.knowledge_root or (ctx.internal_root / "core")
             if ctx.mode == "dev":
                 dev_root = ctx.internal_root / "dev"
-                text += (
-                    f"\nDev-knowledge root — NOT under the cwd — `{dev_root}`\n"
-                    f"  · anchor docs `general/` · work-items `work-items/`\n"
-                    f"Core knowledge `{core_root}` (read-only in dev)."
-                )
-                # A digest so a cold session is oriented without reading. An item-bound turn
-                # already has a subject.
-                try:
-                    digest = _DEV.orient_digest(dev_root, in_progress=not item_bound)
-                except Exception:  # noqa: BLE001 — orientation is best-effort, never fatal
-                    digest = None
-                if digest:
-                    text += f"\n\n## This project\n{digest}"
+                rows += [
+                    ("dev-knowledge", f"`{dev_root}` — NOT under the cwd"),
+                    ("anchor docs", f"`{dev_root}/general/`"),
+                    ("work-items", f"`{dev_root}/work-items/`"),
+                    ("core knowledge", f"`{core_root}` — read-only in dev"),
+                ]
             else:
-                text += f"\nCore-knowledge home — NOT under the cwd — `{core_root}`."
+                rows.append(("core knowledge", f"`{core_root}` — NOT under the cwd"))
+        # A rule rather than a location, and the only one here: a skill names a tool bare, looking
+        # it up under that name misses, and the fallback keyword search costs several round-trips.
+        rows.append(("tool names", "SuperMe's own tools are `mcp__<server>__<tool>`; prompts and "
+                     "skills name them bare, so add the namespace instead of searching the bare "
+                     "name"))
+        width = max(len(k) for k, _ in rows)
+        text = "\n\n## Operating context\n" + "\n".join(
+            f"- {k + ':':<{width + 1}} {v}" for k, v in rows)
+        # A digest so a cold session is oriented without reading. An item-bound turn already has a
+        # subject.
+        if ctx.internal_root and ctx.mode == "dev":
+            try:
+                digest = _DEV.orient_digest(ctx.internal_root / "dev", in_progress=not item_bound)
+            except Exception:  # noqa: BLE001 — orientation is best-effort, never fatal
+                digest = None
+            if digest:
+                text += f"\n\n## This project\n{digest}"
         return text
 
     # The agent's ONLY feedback about a block, so each must be true of the skills it covers.
