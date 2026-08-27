@@ -205,6 +205,28 @@ def test_channels() -> None:
                         if re.search(r"system_append\s*=", p.read_text(encoding="utf-8")))
     ok("nothing hands the phase pointer to the system append", not stragglers, str(stragglers))
 
+    # The X-ray is how the owner checks any of this, so it has to record what was SENT. It once
+    # composed the body into a local and then recorded the raw trigger anyway — the page showed an
+    # empty session block for six phases while the real turns were carrying it correctly.
+    from superme_agent.daemon.services.runs import capture as CAP
+    recorded: dict = {}
+    stub = SimpleNamespace(
+        assemble_system_append=lambda ctx, **k: "APPEND",
+        assemble_system_fragments=lambda ctx, **k: [],
+        compose_prompt=AS.compose_prompt)
+    spine = SimpleNamespace(live_run=lambda *a: {"id": 1}, set_run_feature=lambda *a: None,
+                            record_run_input=lambda rid, **kw: recorded.update(kw))
+    old = CAP._agent, CAP._spine
+    try:
+        CAP._agent, CAP._spine = stub, spine
+        CAP.capture_run_input("ctx", "it1", ctx=SimpleNamespace(internal_root=None),
+                              preamble="BLOCK", prompt="TRIGGER", background=True, phase="plan")
+    finally:
+        CAP._agent, CAP._spine = old
+    ok("the capture records the COMPOSED message, not the bare trigger",
+       recorded.get("prompt_body") == AS.compose_prompt("BLOCK", "TRIGGER"),
+       repr(recorded.get("prompt_body")))
+
 
 # ------------------------------------------------------------------ skills + preamble hedge
 def test_skills() -> None:

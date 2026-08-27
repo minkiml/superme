@@ -1,7 +1,7 @@
 """Read back the ACTUAL input a past run sent and render it as a self-contained HTML page.
 
-Two channels: the system append, captured through the same builder a live turn used, and the
-prompt body as sent. Pure read.
+Every fragment is captured through the same builder a live turn used, and rendered under the
+channel it actually rode in — the cached system prefix, or the message. Pure read.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
     return {"meta": meta, "system_prompt": rec.get("system_prompt") or "",
             "system_fragments": system_fragments, "surface": surface,
             "skills": extras.get("skills") or [], "tools": extras.get("tools") or [],
-            "prompt_body": rec.get("prompt_body") or "", "trigger": rec.get("prompt_body") or ""}
+            "prompt_body": rec.get("prompt_body") or ""}
 
 
 # --------------------------------------------------------------------------- HTML rendering
@@ -261,7 +261,7 @@ def render_input_page(data: dict) -> str:
     # A capture taken before the block moved has no `channel`, and everything in it was system-borne.
     sys_frags = [f for f in frags if f.get("channel", SYSTEM_CHANNEL) == SYSTEM_CHANNEL]
     sys_html = _render_section(
-        "① System prompt — assembled fresh each run · nothing phase-specific rides here", sys_frags)
+        "① System prompt — the cached prefix, assembled fresh each run", sys_frags)
 
     block, body = _peel_turn_block(data.get("prompt_body", ""),
                                    [f for f in frags if f.get("channel") == TURN_CHANNEL])
@@ -306,6 +306,11 @@ def render_input_page(data: dict) -> str:
         "⑥ Tool docs — descriptions + parameter docs, sent with every request", tools) if tools else ""
     body_html = (f"{block_html}{orient_html}{trig_html}{skill_html}{tools_html}"
                  f"{_render_surface(data.get('surface'))}")
+    # Summed from the very lists the cards render, so the total cannot disagree with them. Every
+    # one of these rides in EVERY request of the run, which is why the total is the number to read.
+    counted = [*sys_frags, *block, *(_fragment_orient(orient) if orient is not None else []),
+               *([] if m.get("is_gate") else [{"text": trig}]), *skills, *tools]
+    total = sum(len((f.get("text") or "").strip("\n")) for f in counted)
     title = html.escape(f"{m['item_id']} — {m['title']}")
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -317,7 +322,9 @@ def render_input_page(data: dict) -> str:
         f"<div class='sub'>kind <code>{html.escape(m['kind'])}</code> · session role "
         f"<code>{html.escape(m['session_role'])}</code> · model <code>{html.escape(str(m['model']))}</code>"
         f" · effort <code>{html.escape(str(m['effort']))}</code>"
-        f"{' · background run' if m.get('background') else ''}</div>"
+        f"{' · background run' if m.get('background') else ''}"
+        f" · SuperMe's share of each request <b>{total:,} chars ≈ {_approx_tokens_n(total):,} tok"
+        f"</b></div>"
         f"<div class='note'>{banner}<br>Everything below is authored by SuperMe: the system append, "
         "the prompt body written into the transcript, the phase skill the run invokes, and the "
         "mounted tools' own docs. Not shown, and not sized here: the Claude Code preset base system "

@@ -205,9 +205,6 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | Non
         # `item_bound=True` changes what the operating-context fragment renders; without it the
         # preview shows a prompt no run sent.
         system_prompt = _agent.assemble_system_append(ctx, item_bound=True)
-        # The preamble is not in the append — it rides the turn, so the recorded body is the
-        # COMPOSED message, built by the same function the real turn calls.
-        prompt_body = _agent.compose_prompt(preamble, prompt)
         # Provenance for both channels from the same builder: the system-channel fragments sum to
         # `system_prompt`, the turn-channel one opens `prompt_body`.
         # Guarded: a hiccup must not lose the capture.
@@ -227,7 +224,11 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | Non
             extras_json = None
         _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
                                 feature=PROMPT_EXTRACTION_FEATURE, background=background,
-                                system_prompt=system_prompt, prompt_body=prompt,
+                                system_prompt=system_prompt,
+                                # The preamble is not in the append — it rides the turn, so
+                                # the body recorded is the COMPOSED message, from the same
+                                # function the real turn calls.
+                                prompt_body=_agent.compose_prompt(preamble, prompt),
                                 system_fragments=fragments_json, authored_extras=extras_json,
                                 turn_surface=(_json.dumps(surface, ensure_ascii=False)
                                               if surface else None))
