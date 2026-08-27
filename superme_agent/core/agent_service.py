@@ -22,6 +22,7 @@ from claude_agent_sdk import (
 
 from ..paths import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR,
+    CORE_PLUGIN_DIR, DEV_PLUGIN_DIR,
     fill_charter_paths, plugins_for,
 )
 from .vocab.models import normalize_model
@@ -121,6 +122,12 @@ def _context_usage(usage: dict | None, model_usage: dict | None, model: str | No
     return round(used / window * 100), window
 
 
+def _skills_root(mode: str) -> Path | None:
+    """Where this mode's skill packages live, or None if the plugin is missing."""
+    root = (DEV_PLUGIN_DIR if mode == "dev" else CORE_PLUGIN_DIR) / "skills"
+    return root if root.is_dir() else None
+
+
 def _read_roots(ctx: Context) -> list[Path]:
     """The host's allowed-read roots: cwd, knowledge tree, universal harness, own local
     harness. The hub's cwd contains all four."""
@@ -185,6 +192,13 @@ class AgentService:
         # One labelled line per fact. Run together with `·` these read as prose and are scanned as
         # prose, and the one the reader came for is a path in the middle of a sentence.
         rows = [("host", where), ("context", f"`{ctx.label}`"), ("cwd", f"`{ctx.cwd}`")]
+        # A skill cites its own package files relative to ITSELF (`templates/x.md`,
+        # `references/y.md`, `../../references/z.md`) — and nothing else here says what that is
+        # relative TO, so a run confirms the path with a search before it reads. Naming the root
+        # costs one line; the search cost a round trip in every phase measured.
+        if (skills_root := _skills_root(ctx.mode)) is not None:
+            rows.append(("skill packages", f"`{skills_root}/<skill>/` — what a skill's own "
+                                           "`templates/…` and `references/…` are relative to"))
         # ABSOLUTE paths: the knowledge trees do not live under the cwd, so relative ones silently
         # miss.
         if ctx.internal_root:
