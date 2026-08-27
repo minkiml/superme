@@ -566,8 +566,14 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         found.update({f"the {g['lens']} lens": {"where": f"{g['severity']} finding",
                                                 "why": g["text"]}
                       for g in _arts.lens_gaps(item_dir)})
+        # The server note rode the ENTRY trigger only, because build resumes its own thread and
+        # would otherwise be told twice. Restate it exactly when that turn may be gone: a
+        # compaction cut it, or there is no thread to resume.
+        restate_env = (bool(compacted) or not prev_build) and bool(
+            getattr(_spine.repos().get(context_id), "vet_env", None))
         trigger = kernel_speech.build_loop_trigger(item_id, title, report["cycle"], report["text"],
                                                    reload_skill=bool(compacted),
+                                                   vet_env=restate_env,
                                                    diagnoses=found or None)
     # Idempotent: the open cycle's file may already exist, e.g. after a continue on a parked
     # build.

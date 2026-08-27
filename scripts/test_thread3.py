@@ -134,6 +134,21 @@ def test_triggers() -> None:
            f"{len(_fire)}c")
         ok(f"{_ph}'s skill names its own report template",
            tpl in (SKILLS / _ph / "SKILL.md").read_text(encoding="utf-8"))
+    # The server note rides the ENTRY trigger only, because build RESUMES its own thread. The
+    # failure hop must restate it exactly when that turn may be gone — a compaction cut it, or
+    # there is no thread to resume — and must not otherwise, or build is told twice.
+    _env = lambda t: "vet_env.sh" in t   # noqa: E731 — one predicate, read four ways below
+    ok("the entry build trigger carries the server note",
+       _env(KS.build_first_trigger("it1", "T", vet_env=True)))
+    ok("a failure hop on an intact thread does NOT repeat it",
+       not _env(KS.build_loop_trigger("it1", "T", 2, "R", vet_env=False)))
+    ok("a compacted failure hop restates it, as it already restates the skill",
+       _env(KS.build_loop_trigger("it1", "T", 2, "R", reload_skill=True, vet_env=True)))
+    ok("a repo without vet_env never sees it",
+       not _env(KS.build_loop_trigger("it1", "T", 2, "R", reload_skill=True)))
+    _t = KS.build_loop_trigger("it1", "T", 2, "R", reload_skill=True, vet_env=True)
+    ok("...and it sits ahead of the report body, not behind it",
+       _t.index("vet_env.sh") < _t.index("--- build-vet-"))
     ok("resolve keeps the conflict procedure (task policy, not narration)",
        "conflict marker" in cases["resolve"] and "Do NOT run git commands" in cases["resolve"]
        and "honoring" in cases["resolve"])

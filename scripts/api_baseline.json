@@ -3900,7 +3900,7 @@
   },
   "build_loop_trigger": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, title: str, cycle: int, report_text: str, *, reload_skill: bool = False, diagnoses: dict[str, dict] | None = None) -> str"
+   "sig": "def(item_id: str, title: str, cycle: int, report_text: str, *, reload_skill: bool = False, vet_env: bool = False, diagnoses: dict[str, dict] | None = None) -> str"
   },
   "capture_trigger": {
    "home": "superme_agent.core.kernel_speech",

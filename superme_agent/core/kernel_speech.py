@@ -153,11 +153,13 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
 
 
 def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
-                       *, reload_skill: bool = False,
+                       *, reload_skill: bool = False, vet_env: bool = False,
                        diagnoses: dict[str, dict] | None = None) -> str:
     """The loop's failure-hop build run. The failed cycle's report IS the payload, injected once.
 
-    `diagnoses` are vet's located causes, lifted above the report. Vet never names the fix."""
+    `diagnoses` are vet's located causes, lifted above the report. Vet never names the fix.
+    `vet_env` re-states the server note, which rode the ENTRY trigger only: the caller sets it when
+    this thread may no longer hold that turn."""
     head = (
         "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
         "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
@@ -172,9 +174,12 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
             for c, d in diagnoses.items())
         found = ("\n\nWhat vet found, per failing check — the cause, not the remedy; the change "
                  "is yours to reason out within the current plan:\n" + lines)
+    # Ahead of the report body, not after it: an instruction behind a wall of report text is read
+    # as part of the report.
+    env = vet_env_note(script) if vet_env and (script := vet_env_script()) else ""
     return (
         f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). {head} "
-        f"what its report's `## Verification` entries describe:{found}\n\n"
+        f"what its report's `## Verification` entries describe:{found}{env}\n\n"
         f"--- build-vet-{cycle}.md ---\n{report_text}\n---"
     )
 
