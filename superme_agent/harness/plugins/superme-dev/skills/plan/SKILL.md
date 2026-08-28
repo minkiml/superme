@@ -158,13 +158,22 @@ Finally: **hand build only tasks it can complete itself.** It edits code in its 
 contract-doc changes; it cannot make an owner's decision or reach outside its boundary. A KNOWN wall
 is settled here — decide and record the assumption — never left as a mid-build surprise.
 
-### 4d — Dry-run the `run:` blocks
+### 4d — Dry-run the `run:` blocks, and close the coverage gaps
 
 `check_plan_commands` runs only the blocks you just wrote and records nothing. A failing assertion is
 EXPECTED — the work does not exist yet. What you are looking for is a command that could not run AT
 ALL: a usage error, an import error, a path that is not there. That one will never come back green
 however well build does its job, and finding it now costs a second instead of a whole build⟷vet
 cycle.
+
+It also names **every task no check will prove** — the same count the owner meets at the gate. Fix
+those here: add the check, or decide the task genuinely needs none and be ready to say why. Then run
+it once more. Arriving at step 5 with a gap you could have closed costs a second authoring pass and
+a second filing.
+
+And it names any `run:` block that **leaves this item's worktree**. That one cannot show up as a
+failure here — the other checkout exists and answers, so the block comes back looking like the
+expected not-built-yet result and fails for real at build. Rewrite it relative to the repo root.
 
 ## Step 5 — File the user-facing report
 
@@ -179,9 +188,9 @@ You supply the prose:
 - **`confirm`** — **what the checks will not tell you**, the paragraph under the table.
 - **`decisions` / `assumptions`** — only when there is something real for them.
 
-The tool tells you how many tasks have **no check**, and the report names them. That is the plan
-gate's first question, so answer it before it is asked: add the missing check, or be ready to say why
-that task needs no proof. Never write a check you don't believe in to clear the count.
+The report repeats the coverage 4d already showed you, because the owner reads it here. If it still
+names a task with no check, you skipped 4d — go back rather than filing twice. Never write a check
+you don't believe in to clear the count.
 
 **On a revision this report is still about the PRODUCT** — what is being built and what will prove
 it, exactly as a first plan reads. What changed, and why, is the record's job. Never narrate the

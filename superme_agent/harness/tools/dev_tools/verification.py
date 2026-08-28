@@ -10,9 +10,75 @@ class CheckPlanCommandsArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
 
 
+def _plan_coverage(item_dir, kind: str | None) -> str:
+    """Which of the plan's tasks nothing will prove — the same count `file_plan_report` reports.
+
+    It lived only there, so planning learned of a gap by FILING the report, then went back through
+    authoring and dry-run and filed again: eight calls on one live run to add one check. Reading it
+    here costs nothing, because the dry-run is already the last step before the report."""
+    from ....core.artifacts import proof_rows
+    from ....core.vocab.kind_profiles import get_profile
+    if get_profile(kind).kind == "research":
+        return ""   # a research plan declares no checks BY DESIGN — a gap call-out would be noise
+    rows = [r for r in proof_rows(item_dir) if r["task"]]
+    if not rows:
+        return ""
+    gaps = [r for r in rows if not r["verified"]]
+    if not gaps:
+        return f"\n\nAll {len(rows)} task(s) are defended by a check."
+    named = ", ".join(f"{r['task']} ({r['text'][:60]})" for r in gaps)
+    return (f"\n\n{len(gaps)} of {len(rows)} task(s) have NO check: {named}. Add one now, or be "
+            "ready to say at the gate why that task needs no proof — the report you file next "
+            "reports this same count to the owner.")
+
+
+# Writing to a pipe or a temp file is not "leaving the worktree" — only naming another CHECKOUT is.
+_SYSTEM_ROOTS = ("/dev/", "/tmp/", "/var/folders/", "/private/tmp/", "/usr/", "/etc/", "/bin/",
+                 "/sbin/", "/opt/", "/proc/")
+
+
+def _stray_run_blocks(item_dir, repo_dir) -> str:
+    """`run:` blocks that leave this item's worktree — the one failure the dry run cannot see.
+
+    A block that `cd`s to the primary checkout RUNS THERE happily: the tree exists, its files are
+    just older, so the dry run returns "no tests collected" — which 4d teaches the agent to expect.
+    It comes back green at plan and fails at build. One live item spent a whole revise cycle on it.
+    The plan skill states the rule ("never `cd`, never an absolute path"); nothing enforced it."""
+    import re
+    from pathlib import Path as _P
+    from ....core import artifacts as _arts
+    plan_path = _P(item_dir) / "artifacts" / _arts.artifact_file("plan")
+    if not plan_path.is_file():
+        return ""
+    try:
+        checks = _arts.parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])
+    except (OSError, ValueError):
+        return ""
+    root = str(_P(repo_dir).resolve())
+    bad: list[str] = []
+    for c in checks:
+        for line in str(c.get("run") or "").splitlines():
+            if re.search(r"(^|[;&|]\s*)cd\s", line):
+                bad.append(f"{c.get('id') or '?'}: `cd` — {line.strip()[:70]}")
+                continue
+            for tok in re.findall(r"(?<![\w=])/[^\s'\"|;&)]+", line):
+                if tok.startswith(_SYSTEM_ROOTS) or tok.startswith(root):
+                    continue
+                bad.append(f"{c.get('id') or '?'}: absolute path — {tok[:60]}")
+                break
+    if not bad:
+        return ""
+    return ("\n\nLEAVES THIS ITEM'S WORKTREE — " + "; ".join(bad[:4])
+            + ". Those run in the primary checkout, which sits on the anchor branch WITHOUT this "
+              "item's commits, so they grade code the item never wrote. They pass here and fail at "
+              "build. Every path is relative to the repo root.")
+
+
 def _check_plan_commands(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
     async def check_plan_commands(args: dict) -> dict:
-        """Smoke-test the `run:` blocks already written into this item's plan. Records nothing."""
+        """Smoke-test the `run:` blocks in this item's plan, and say what nothing proves.
+
+        Records nothing."""
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
@@ -21,6 +87,14 @@ def _check_plan_commands(*, store, context_id, dev_root=None, repo_dir=None, bou
             return _err(f"No work-item {item_id!r} here.")
         if repo_dir is None:
             return _err("no repo to run in from this session.")
+        kind = None
+        try:
+            from ....core.dev_knowledge import parse_md
+            meta, _b = parse_md((d / "item.md").read_text(encoding="utf-8"))
+            kind = meta.get("kind")
+        except (OSError, ValueError):
+            pass
+        coverage = _stray_run_blocks(d, repo_dir) + _plan_coverage(d, kind)
         from ....daemon.services import checks as _checks
         try:
             rows = await asyncio.to_thread(_checks.dry_run, d, repo_dir)
@@ -28,11 +102,12 @@ def _check_plan_commands(*, store, context_id, dev_root=None, repo_dir=None, bou
             return _err(f"dry run could not complete: {e}")
         if not rows:
             return _ok("nothing to dry-run — no check in this plan carries a `run:` block "
-                       "(or this host has no sandbox).")
+                       "(or this host has no sandbox)." + coverage)
         return _ok("\n".join(f"{r['check']}: {r['result']}" for r in rows)
                    + "\n\nA failing assertion is EXPECTED — the work is not built yet. What you "
                      "are looking for is a command that could not run at all (usage error, import "
-                     "error, wrong path): that one will never come back green, whatever build does.")
+                     "error, wrong path): that one will never come back green, whatever build does."
+                   + coverage)
     return check_plan_commands
 
 
@@ -234,10 +309,14 @@ def _read_verification_library(*, store, context_id, dev_root=None, bound_item_i
                 out.append("- (none)")
         item_id = _s(args, "item_id")
         d = _item_dir(dev_root, item_id) if item_id else None
-        if d is not None and not _bound_err(item_id, bound_item_id):
+        # The LIBRARY needs no plan. Only this addendum does, and an item without one has no check
+        # to nominate — a research item never writes a plan at all, and close mounts this tool. It
+        # used to read the file unguarded and hand back a raw Errno 2.
+        plan_path = (d / "artifacts" / _arts.artifact_file("plan")) if d is not None else None
+        if d is not None and plan_path.is_file() and not _bound_err(item_id, bound_item_id):
             noms = _arts.nominations(d)
             checks = {c["id"]: c for c in _arts.parse_vet_plan(
-                (d / "artifacts" / _arts.artifact_file("plan")).read_text(encoding="utf-8")).get("checks", [])}
+                plan_path.read_text(encoding="utf-8")).get("checks", [])}
             blocks = [_vl.render_entry(checks[cid]) for cid in noms if cid in checks]
             if blocks:
                 out.append("\n## nominated by this item — write each as an `append` op on "

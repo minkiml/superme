@@ -476,12 +476,163 @@ def test_tool_channel() -> None:
        "Tool docs — descriptions + parameter docs" not in src)
 
 
+def test_plan_coverage() -> None:
+    print("plan coverage — the dry-run names the gap, so filing is not the linter")
+    import tempfile
+    from superme_agent.harness.tools.dev_tools.verification import _plan_coverage
+
+    # The REAL grammar, copied off a live plan.md: `t<n> —` task heads, `### <check-id>` blocks
+    # with a `covers:` line. The row-count assertion below fails loudly if that grammar moves.
+    plan = """## Tasks
+- [ ] t1 — Suppress the placeholder under `--quiet`
+      Gate the print behind `not getattr(args, "quiet", False)`.
+
+- [ ] t2 — Rewrite the flag's help text
+      It still describes the old, narrower behaviour.
+
+## Verification plan
+depth: checks
+reason: printed output under a CLI flag is directly observable.
+env: none
+
+### quiet-sum-is-silent
+- proves: with `--quiet` and no entries, `tally sum` prints nothing
+- covers: t1
+- mode: command
+- run: |
+    pytest -k quiet_sum
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp) / "item"
+        (d / "artifacts").mkdir(parents=True)
+        (d / "artifacts" / "plan.md").write_text(plan, encoding="utf-8")
+
+        from superme_agent.core.artifacts import proof_rows
+        ok("the fixture parses as 2 tasks (guards the grammar)",
+           len([r for r in proof_rows(d) if r["task"]]) == 2)
+        impl = _plan_coverage(d, "implementation")
+        ok("an uncovered task is NAMED, not just counted", "t2" in impl)
+        ok("the covered task is not reported as a gap", "t1 (" not in impl)
+        # The whole point: planning must learn this at 4d, one step BEFORE it files.
+        ok("it says the report will repeat the same count", "report" in impl.lower())
+
+        # A research plan declares no checks by design — a gap call-out there would be noise.
+        ok("research is exempt", _plan_coverage(d, "research") == "")
+
+        full = plan.replace("- covers: t1", "- covers: t1 t2")
+        (d / "artifacts" / "plan.md").write_text(full, encoding="utf-8")
+        clean = _plan_coverage(d, "implementation")
+        ok("a fully defended plan says so and names no gap",
+           "NO check" not in clean and "defended" in clean)
+
+    src = Path("superme_agent/harness/tools/dev_tools/verification.py").read_text(encoding="utf-8")
+    ok("coverage rides BOTH return paths, including the no-run: one",
+       src.count("+ coverage") + src.count('." + coverage') >= 2)
+    skill = Path("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md").read_text(
+        encoding="utf-8")
+    ok("the skill no longer asks for an answer step 5 alone could give",
+       "answer it before it is asked" not in skill)
+
+
+def test_library_without_a_plan() -> None:
+    print("verification library — readable by an item that has no plan.md")
+    import asyncio
+    import tempfile
+    from superme_agent.harness.tools.dev_tools.verification import _read_verification_library
+
+    with tempfile.TemporaryDirectory() as tmp:
+        dev_root = Path(tmp) / "dev"
+        item = dev_root / "work-items" / "aaaabbbbcccc"
+        (item / "artifacts").mkdir(parents=True)
+        # A RESEARCH item: it never writes a plan, and `close` mounts this tool. 16 of the 24
+        # research items on the playground are in exactly this state.
+        (item / "item.md").write_text(
+            '---\nid: aaaabbbbcccc\nkind: research\nphase: close\n---\nBody.\n',
+            encoding="utf-8")
+        ok("the fixture really has no plan.md", not (item / "artifacts" / "plan.md").is_file())
+
+        tool = _read_verification_library(store=None, context_id="probe", dev_root=dev_root,
+                                          bound_item_id="aaaabbbbcccc")
+        res = asyncio.run(tool({"item_id": "aaaabbbbcccc"}))
+        text = json.dumps(res)
+        # It used to hand back a raw `[error] [Errno 2] No such file or directory: …/plan.md`.
+        ok("no errno leaks out", "Errno" not in text and "No such file" not in text)
+        ok("the library itself still comes back", "standing" in text and "available" in text)
+
+        # And the addendum still appears when there IS a plan, so the guard did not delete it.
+        (item / "artifacts" / "plan.md").write_text("## Tasks\n- [ ] t1 — a task\n", encoding="utf-8")
+        res2 = asyncio.run(tool({"item_id": "aaaabbbbcccc"}))
+        ok("a plan-bearing item still reads clean", "Errno" not in json.dumps(res2))
+
+    src_txt = Path("superme_agent/harness/tools/dev_tools/verification.py").read_text(
+        encoding="utf-8")
+    ok("the plan read is guarded, not merely wrapped",
+       "plan_path.is_file()" in src_txt and 'artifact_file("plan")).read_text' not in src_txt)
+
+
+def test_stray_run_blocks() -> None:
+    print("run: blocks — the dry run now says when a command leaves this item's worktree")
+    import tempfile
+    from superme_agent.harness.tools.dev_tools.verification import _stray_run_blocks
+
+    PLAN = """## Tasks
+- [ ] t1 — a task
+
+## Verification plan
+depth: checks
+
+### c1
+- proves: something
+- covers: t1
+- mode: command
+- run: |
+    {cmd}
+"""
+    WT = "/Users/cooma/.superme/worktrees/test-playground/aaaabbbbcccc"
+
+    def fires(cmd: str) -> bool:
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "item"
+            (d / "artifacts").mkdir(parents=True)
+            (d / "artifacts" / "plan.md").write_text(PLAN.format(cmd=cmd), encoding="utf-8")
+            return bool(_stray_run_blocks(d, WT))
+
+    # The shape that cost one live item a whole revise cycle: the command runs in the PRIMARY
+    # checkout, which sits on the anchor branch without this item's commits, so it grades code the
+    # item never wrote — and the dry run cannot tell, because that tree exists and answers.
+    ok("a `cd` to another checkout fires",
+       fires("cd /Users/cooma/Developer/my_docs/test-playground && pytest -k quiet"))
+    ok("an absolute path into another checkout fires",
+       fires("pytest /Users/cooma/Developer/my_docs/test-playground/tests/test_ledger.py"))
+    ok("a `cd` later in the line fires", fires("make x && cd ../other && pytest"))
+
+    # False positives would nag every plan, so the common idioms must stay silent.
+    ok("a relative command is clean", not fires("pytest -k quiet_sum"))
+    ok("2>/dev/null is clean", not fires("python -m pytest tests/t.py 2>/dev/null"))
+    ok("a /tmp path is clean", not fires("ls /tmp/scratch && pytest tests/"))
+    ok("a path INSIDE this worktree is clean", not fires(f"pytest {WT}/tests/test_ledger.py"))
+    ok("a word merely containing 'cd' is clean", not fires("python -m mycd --check"))
+
+    # A helper nobody calls is a detector that never fires — pin the wiring, not just the logic.
+    src_txt = Path("superme_agent/harness/tools/dev_tools/verification.py").read_text(
+        encoding="utf-8")
+    ok("check_plan_commands actually calls it",
+       "_stray_run_blocks(d, repo_dir)" in src_txt)
+    skill = Path("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md").read_text(
+        encoding="utf-8")
+    ok("the skill still states the rule the check now enforces",
+       "never `cd`, never an absolute path" in skill)
+
+
 def main() -> None:
     test_run_protocol()
     test_triggers()
     test_runners_flip()
     test_channels()
     test_tool_channel()
+    test_plan_coverage()
+    test_library_without_a_plan()
+    test_stray_run_blocks()
     test_skills()
     test_reader()
     test_snapshot()

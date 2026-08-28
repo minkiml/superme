@@ -68,3 +68,4 @@ scripts/bench-result/
 /scripts/probe_compaction.py
 /scripts/probe_curve.py
 /scripts/probe_ttl.py
+/scripts/probe_thin_fork.py

@@ -43,10 +43,10 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "check_plan_commands",
-        "Runs the commands already written into this item's plan and reports each exit code. Use "
-        "it at the end of planning, to catch a command that cannot run at all before a build "
-        "cycle discovers it. Do not use it to judge the work: nothing is built yet, and nothing "
-        "is recorded. Returns each command with its result.",
+        "Runs the commands written into this item's plan and reports each exit code, plus which "
+        "tasks no check will prove. Use it at the end of planning, to catch a command that cannot "
+        "run and a task nothing defends. Do not use it to judge the work: nothing is built or "
+        "recorded. Returns each result, then the coverage.",
         CheckPlanCommandsArgs, _check_plan_commands,
     ),
     ToolSpec(
