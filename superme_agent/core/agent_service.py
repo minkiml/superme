@@ -207,7 +207,7 @@ class AgentService:
                 dev_root = ctx.internal_root / "dev"
                 rows += [
                     ("dev-knowledge", f"`{dev_root}` — NOT under the cwd"),
-                    ("anchor docs", f"`{dev_root}/general/`"),
+                    ("Repo anchor docs", f"`{dev_root}/general/`"),
                     ("work-items", f"`{dev_root}/work-items/`"),
                     ("core knowledge", f"`{core_root}` — read-only in dev"),
                 ]

@@ -376,7 +376,7 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, 
         desc = (it.get("description") or "").strip() or "(no description — pull to read)"
         lines.append(f"- **{it['slug']}** — {desc}")
     header = (
-        "## Constitution catalog (operational directives — in force)\n"
+        "## Constitution catalog\n"
         "These are the list of some constitution of superme's framework. Each line names one constitution; when its "
         "description is relevant to what you're doing and you need the full contract or information, call "
         "`read_constitution(name)` to load its body and follow them."

@@ -175,8 +175,7 @@ context fill. Nothing is a black box when it goes wrong.
 - **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
   outside your repos joins the estate too.
 
-### Quick notes & observations
-- 
+- **Token usage optimization.** workflow shows large token consumption regardless of the task scale due to over-engineering and poor skill instructions.
 
 ---
 
