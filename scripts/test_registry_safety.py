@@ -116,6 +116,15 @@ def test_orphans(tmp: Path) -> None:
     ok("the orphan carries the evidence that proves it existed",
        s.orphaned_repos()[0]["evidence"] == [str(know / "ghost-knowledge")])
 
+    # `remove_worktree` takes the item dir and leaves the repo dir above it. Warning about that
+    # tells the owner work is lost when the folder holds nothing.
+    (git_layer.DEFAULT_WORKTREES_HOME / "spent").mkdir(parents=True, exist_ok=True)
+    ok("an empty worktree home is not stranded work",
+       "spent" not in {r["repo_id"] for r in s.orphaned_repos()})
+    (git_layer.DEFAULT_WORKTREES_HOME / "spent" / "item-x").mkdir(parents=True, exist_ok=True)
+    ok("...but one that still holds an item is",
+       "spent" in {r["repo_id"] for r in s.orphaned_repos()})
+
     paths.KNOWLEDGE_REPO_DIR = tmp / "nope"
     git_layer.DEFAULT_WORKTREES_HOME = tmp / "nope2"
     ok("no knowledge repo at all → no orphans and no crash", s.orphaned_repos() == [])

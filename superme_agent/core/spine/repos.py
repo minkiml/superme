@@ -140,7 +140,7 @@ class RepoOps:
                     for r in c.execute("SELECT * FROM archived_repo").fetchall()}
 
     def orphaned_repos(self) -> list[dict]:
-        """Repos with work on disk, no registry entry, and no tombstone explaining the absence.
+        """Repos with work on disk, no registry entry, and no tombstone explaining it.
 
         Their items still exist and nothing can reach them."""
         from ...paths import KNOWLEDGE_REPO_DIR
@@ -156,6 +156,10 @@ class RepoOps:
             for p in entries:
                 rid = p.name[:-len(suffix)] if suffix and p.name.endswith(suffix) else p.name
                 if suffix and not p.name.endswith(suffix):
+                    continue
+                # A worktree home outlives its items, and empty it holds nothing to strand. A
+                # knowledge home's existence is itself the evidence.
+                if suffix == "" and not any(p.iterdir()):
                     continue
                 if rid and rid not in known:
                     found.setdefault(rid, set()).add(str(base / p.name))
