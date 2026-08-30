@@ -376,6 +376,24 @@ _GIT_REDIRECTS = ("-C", "--git-dir", "--work-tree")
 _HEAD_REV = re.compile(r"(?<![A-Za-z0-9_/-])HEAD(?![A-Za-z0-9_])")
 
 
+def _split_separators(tokens: list[str]) -> list[str]:
+    """Separators that shlex glued to a neighbour, split back out.
+
+    `pwd; git ...` otherwise reads as one segment."""
+    out: list[str] = []
+    for tok in tokens:
+        if tok in _BASH_SEPARATORS:
+            out.append(tok)
+            continue
+        head = tok.rstrip(";&|")
+        tail = tok[len(head):]
+        if head:
+            out.append(head)
+        for ch in tail:
+            out.append(ch)
+    return out
+
+
 def reads_ambient_head(command: str) -> bool:
     """A git read whose revision is the shell's HEAD, not a named tree.
 
@@ -387,7 +405,7 @@ def reads_ambient_head(command: str) -> bool:
     except ValueError:
         return False
     seg: list[str] = []
-    for tok in [*tokens, ";"]:
+    for tok in [*_split_separators(tokens), ";"]:
         if tok in _BASH_SEPARATORS:
             if seg and seg[0] == "git" \
                     and not any(t in _GIT_REDIRECTS or t.startswith(tuple(f"{r}=" for r in _GIT_REDIRECTS))

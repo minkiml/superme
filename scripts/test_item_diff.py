@@ -143,6 +143,16 @@ def permission_guard() -> None:
        not reads_ambient_head("git log --oneline -3 src/HEADER.py"))
     ok("a non-git command naming HEAD is untouched", not reads_ambient_head("echo HEAD"))
 
+    # Found in a live plan trace. `shlex` glues `;` to the token before it.
+    ok("a git read behind any prefix is still caught",
+       reads_ambient_head("pwd; git rev-parse --abbrev-ref HEAD 2>/dev/null; git log -5"))
+    ok("...and behind an && too", reads_ambient_head("echo hi && git diff main...HEAD"))
+    ok("...and behind a pipe", reads_ambient_head("true | git diff main...HEAD"))
+    ok("a scoped read behind a prefix is still exempt",
+       not reads_ambient_head("pwd; git -C /wt diff main...HEAD"))
+    ok("a prefix does not invent a git command",
+       not reads_ambient_head("echo git; echo HEAD"))
+
     async def approve(_tool, _args):
         return True
 
