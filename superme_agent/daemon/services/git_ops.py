@@ -1,6 +1,6 @@
 """The review-gate merge, shared by both callers.
 
-Leaving the review gate and merging the branch are ONE act, so `advance_item` and the
+Leaving the review gate and merging the branch are one act, so `advance_item` and the
 `/git/merge` route share one body.
 
 A conflict returns `merged=False` with a conflict list, never an exception.
@@ -32,8 +32,7 @@ def repo_anchor(ctx, spine) -> str | None:
 
 
 def repo_review_mode(ctx, spine) -> str:
-    """This repo's review mode. Read LIVE at every decision point, never cached on the item, so flipping
-    it applies to items already at review."""
+    """This repo's review mode, read live at every decision point."""
     rc = spine.repo(ctx.id)
     return rc.review_mode if rc else REVIEW_MODE_DEFAULT
 
@@ -55,9 +54,7 @@ def _is_secret(name: str) -> bool:
 
 
 def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tuple[int, list[str]]:
-    """Copy the owner-named gitignored source paths into a fresh scratch worktree.
-
-    A worktree holds tracked files only, so a completeness claim cannot be proven in it."""
+    """Copy the owner-named gitignored source paths into a fresh scratch worktree."""
     copied, skipped = 0, []
     for rel in paths:
         src, dst = repo / rel, worktree / rel
@@ -93,7 +90,7 @@ def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tupl
                     shutil.copy2(Path(cur) / f, out)
                     out.chmod(0o444)
                     copied += 1
-            # Directories stay writable: unlinking depends on the DIRECTORY's write bit, so read-
+            # Directories stay writable: unlinking depends on the directory's write bit, so read-
             # only dirs broke disposal.
         except Exception as e:                                  # noqa: BLE001 — never fatal
             skipped.append(f"{rel}: {e}")
@@ -114,9 +111,7 @@ def item_worktree_cwd(ctx, item: dict, phase: str) -> Path:
 
 
 def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store, spine) -> Path:
-    """The isolated tree a READ-ONLY kind reads from, created on demand.
-
-    Lazy rather than gate-driven, because a sweep-launched item never passes `advance_item`."""
+    """The isolated tree a read-only kind reads from, created on demand."""
     kind = str(item.get("kind") or "")
     if not kind_profiles.get_profile(kind).scratch_worktree:
         return ctx.cwd
@@ -156,22 +151,17 @@ def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store,
 
 
 def pr_open(item: dict) -> bool:
-    """Is this item's PR open — the deputy approved and the merge is the OWNER's act? Derived from
-    stamped and not-yet-merged, so nothing has to clear a flag."""
+    """Is this item's PR open, the deputy approved and the merge the owner's act?"""
     return bool(item.get("git_pr_opened_at")) and not item.get("git_merge_commit")
 
 
 def close_pr(dev, dev_root, item_id: str) -> None:
-    """Leaving `review` without merging closes the PR, because the approval is spent.
-
-    Without it the stamp outlives the diff it approved."""
+    """Leaving review without merging closes the PR, because the approval is spent."""
     dev.set_work_item_git(dev_root, item_id, git_pr_opened_at=None)
 
 
 def open_pr(ctx, context_id: str, item_id: str, *, dev, dev_store) -> dict:
-    """Record that the diff is now the owner's to merge, and page them.
-
-    Idempotent within one stay at review, so re-judging the same diff does not move the timestamp."""
+    """Record that the diff is now the owner's to merge, and page them."""
     dev_root = ctx.internal_root / "dev"
     item = dev.read_work_item(dev_root, item_id) or {}
     first = not item.get("git_pr_opened_at")
@@ -191,16 +181,12 @@ _DEFAULT_COMMIT_TYPE = "feat"
 
 
 def _delivered_line(item_dir: Path) -> str:
-    """The **Delivered** field of `artifacts/review.md`, and the body for the landing commit.
-
-    It reads the agent-facing record: a field a machine parses belongs in the doc written for
-    machines."""
+    """The delivered field of the review artifact, and the landing commit's body."""
     return artifacts.delivered_line(item_dir)
 
 
 def item_trailers(item: dict, item_id: str) -> dict:
-    """The SuperMe facts that ride below a commit's message, as git trailers — the only place item ids
-    touch a commit."""
+    """The SuperMe facts that ride below a commit's message, as git trailers."""
     sf = item.get("spawned_from") or {}
     return {
         "SuperMe-Item": item_id,
@@ -209,8 +195,7 @@ def item_trailers(item: dict, item_id: str) -> dict:
 
 
 def declared_commit(dev_store, context_id: str, item_id: str) -> dict | None:
-    """The `machine.commit` the review run declared, read back from its `run.report` event.
-    Newest-first: a `revise` sends the item round again. Best-effort."""
+    """The commit the review run declared, read back from its report event."""
     try:
         for e in dev_store.list_events(context_id, item_id=item_id, limit=40):
             if str(e.get("kind")) != "run.report":
@@ -224,9 +209,7 @@ def declared_commit(dev_store, context_id: str, item_id: str) -> dict | None:
 
 
 def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | None = None) -> str:
-    """The landing commit's message, assembled by the kernel from a declared spec.
-
-    Review is the last phase that knows what shipped. Absent, it falls back to the item title."""
+    """The landing commit's message, assembled from a declared spec."""
     if declared and declared.get("type") and declared.get("subject"):
         subject = f"{declared['type']}: {declared['subject']}"
     else:
@@ -236,10 +219,7 @@ def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | No
 
 
 def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | None:
-    """What a review→plan re-plan needs: what landed, what it settled, and the latest findings.
-
-    It reads the agent-facing record, because a re-plan must not silently re-open settled
-    decisions."""
+    """What a review-to-plan re-plan needs: what landed, and what it settled."""
     parts: list[str] = []
     try:
         review_record = item_dir / "artifacts" / artifacts.artifact_file("review")
@@ -248,7 +228,7 @@ def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | No
             if body:
                 head = body[:char_cap]
                 parts.append("Review's record of the last pass (artifacts/review.md):\n" + head)
-                # `Owner's decision` sits at the END of the record, so head-truncation drops it
+                # `Owner's decision` sits at the end of the record, so head-truncation drops it
                 # exactly when the record is long.
                 decision = artifacts.owner_decision(item_dir)
                 if decision and decision not in head:
@@ -265,8 +245,9 @@ def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | No
 
 
 def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -> dict:
-    """Perform the review-gate merge and return the result dict. Raises HTTPException on the shared
-    refusals; a CONFLICT is a normal return, never a raise."""
+    """Perform the review-gate merge.
+
+    A conflict is a normal return, never a raise."""
     dev_root = ctx.internal_root / "dev"
     item = dev.read_work_item(dev_root, item_id)
     if item is None:
@@ -278,7 +259,7 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
             status_code=409,
             detail=f"this item is finished ({item.get('outcome') or 'done'}) — there is nothing "
                    f"left to decide. Its branch stays unmerged by that decision.")
-    # The owner's decision IS the merge. Pre-review the vet bar is unmet, so an ungated merge
+    # The owner's decision is the merge. Pre-review the vet bar is unmet, so an ungated merge
     # would land unvetted work.
     if str(item.get("phase")) != "review":
         raise HTTPException(

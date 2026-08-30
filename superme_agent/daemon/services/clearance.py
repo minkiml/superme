@@ -1,7 +1,7 @@
-"""Mechanical clearance — the post-CLOSE kernel hook.
+"""Mechanical clearance — the post-close kernel hook.
 
-Clearance is what makes a work-item Done: no agent proposes it and no owner clicks it. It ALWAYS
-COMPLETES, and refuses exactly one thing — a non-terminal blocking child, which is genuine
+Clearance is what makes a work-item Done: no agent proposes it and no owner clicks it. It always
+completes, and refuses exactly one thing — a non-terminal blocking child, which is genuine
 waiting.
 """
 
@@ -31,8 +31,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                knowledge_gap: str | None = None, _depth: int = 0) -> dict:
     """Clear a close-phase work-item to terminal.
 
-    Never raises and never deletes a log row. `knowledge_gap` records that the closing run never
-    landed its writes."""
+    Never raises, never deletes a log row."""
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:
         return _refused("context has no internal root")
@@ -47,7 +46,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     if _spine.is_item_running(context_id, item_id):
         return _refused("a run is in progress for this item")
     # The kind's declared criteria, evaluated mechanically. Review's exit locked code and git, so
-    # the WORK cannot refuse here.
+    # the work cannot refuse here.
     all_items = _dev.read_all(dev_root)["work_items"]
     cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, all_items)
     if not cr["ok"]:
@@ -66,7 +65,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
         _dev_store.log_event(context_id, "close.knowledge_failed",
                              f"Cleared without the knowledge write — {knowledge_gap}",
                              item_id=item_id, actor="daemon", meta={"gap": knowledge_gap})
-    # 1. snapshot BEFORE freeing rows.
+    # 1. snapshot before freeing rows.
     from .runs import render_execution_md   # lazy: runs.py drives clearance
     md = render_execution_md(context_id, item_id, item)
     _dev.write_artifact(dev_root, item_id, "execution.md", md)
@@ -100,7 +99,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                 and kind_profiles.is_final_phase(parent.get("kind"),
                                                  parent.get("phase") or "triage")):
             clear_item(context_id, resume_id, actor="daemon", _depth=_depth + 1)
-    # Release every item parked on this one's `after:` edge. Only a COMPLETED upstream releases.
+    # Release every item parked on this one's `after:` edge. Only a completed upstream releases.
     for it in all_items:
         if it.get("id") == item_id:
             it["outcome"] = "completed"
@@ -112,7 +111,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     # The transcript purge is chained behind the sweep, which must read it first. With learning
     # off, purge anyway.
     from .learning import _fire_sweep_bg   # lazy
-    session_ids = _dev.work_item_session_ids(item)   # ALL role threads (intake/build/vet + legacy)
+    session_ids = _dev.work_item_session_ids(item)  # All role threads (intake/build/vet + legacy)
     for sid in session_ids:
         if _spine.learning_enabled_for(context_id):
             _fire_sweep_bg(ctx, sid, then_delete="retired")
@@ -125,7 +124,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                          item_id=item_id, actor=actor,
                          meta={"runs_freed": runs_freed,
                                **({"knowledge_gap": knowledge_gap} if knowledge_gap else {})})
-    # A probe tears itself down HERE, at the terminal moment: clearance is the one point every
+    # A probe tears itself down here, at the terminal moment: clearance is the one point every
     # finished item passes.
     if _autopilot.is_prompt_extraction(item):
         from . import prompt_extraction as px
@@ -138,8 +137,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
 
 
 def close_retries(context_id: str, item_id: str) -> int:
-    """How many closing runs have already failed for this item. Read from the event trail, not
-    from memory — a daemon restart must not reset the retry budget."""
+    """How many closing runs have already failed for this item."""
     try:
         rows = _dev_store.list_events(context_id, item_id=item_id, limit=100)
     except Exception:

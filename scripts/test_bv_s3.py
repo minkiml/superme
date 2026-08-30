@@ -40,7 +40,7 @@ def test_role_map() -> None:
     ok("map matches the design table", {p: KP.session_role(p) for p in want} == want)
     ok("null phase defaults to triage/intake", KP.session_role(None) == "intake")
     try:
-        KP.session_role("deliver")   # the pre-rename name must be DEAD, not silently intake
+        KP.session_role("deliver")  # the pre-rename name must be dead, not silently intake
         ok("unknown phase fails loud", False)
     except KeyError:
         ok("unknown phase fails loud", True)
@@ -68,14 +68,14 @@ def test_slots(tmp: Path) -> None:
     ok("triage slot written + computed at triage",
        it["sessions"] == {"triage": "sid-triage"} and it["session_id"] == "sid-triage")
 
-    # THE RULE, first half: a DIFFERENT phase mints — it does not inherit the last phase's thread.
+    # The rule, first half: a different phase mints — it does not inherit the last phase's thread.
     dev.set_work_item_phase(root, wid, "plan")
     it = dev.read_work_item(root, wid)
     ok("at plan: computed sid is None (mint), triage's thread SURVIVES untouched",
        it["session_id"] is None and it["sessions"]["triage"] == "sid-triage")
     dev.set_work_item_session(root, wid, "sid-plan", slot="plan")
 
-    # THE step-3 claim still holds: entering build does not lose the intake-side threads.
+    # The step-3 claim still holds: entering build does not lose the intake-side threads.
     dev.set_work_item_phase(root, wid, "build")
     ok("at build: mint, and both intake-side threads survive",
        dev.read_work_item(root, wid)["session_id"] is None)
@@ -182,7 +182,7 @@ def test_resolve(tmp: Path) -> None:
        resolve_item_session({"phase": "review", "sessions": {"plan": "s-int"}}, **kw)
        == ("review", None) and not adopted)
 
-    # Pre-split adoption: the retired shared `intake` slot becomes THIS phase's, exactly once.
+    # Pre-split adoption: the retired shared `intake` slot becomes this phase's, exactly once.
     ok("pre-split shared slot adopted into the current phase and resumed",
        resolve_item_session({"phase": "review", "sessions": {"intake": "s-int"}}, **kw)
        == ("review", "s-int") and adopted == [("s-int", "review")])
@@ -209,9 +209,9 @@ def test_resolve(tmp: Path) -> None:
 
 
 def test_reentry_delta(tmp: Path) -> None:
-    """Resuming gives a phase its own memory; this stops that memory OUTRANKING the disk.
+    """Resuming gives a phase its own memory.
 
-    A review resuming over a rewritten investigation would report that nothing had changed."""
+    This stops that memory outranking the disk."""
     print("a re-entered phase is told what changed since IT last ran")
     sp = SystemSpine(db_path=tmp / "reentry.db")
     repo, wid = "r-reentry", "abc123def456"
@@ -251,8 +251,7 @@ def test_reentry_delta(tmp: Path) -> None:
 
     # The trigger: silence for a first entry, named files for a re-entry. "Be careful" is neither.
     plain = kernel_speech.intake_trigger("review", wid, "T")
-    # The trigger also carries this phase's report template now, so "thin" is about the CHANGED
-    # block, not about length: a first entry claims nothing moved.
+    # The trigger also carries this phase's report template, so thin means the changed block.
     ok("first entry: no changed-files block",
        plain.startswith('Run superme-dev:review for work-item `%s` ("T").' % wid)
        and "changed on disk" not in plain and "Re-read every one of them" not in plain)
@@ -278,7 +277,7 @@ def test_reentry_delta(tmp: Path) -> None:
        kernel_speech.intake_trigger("plan", wid, "T", many).count("- `artifacts/a") == 12
        and "…and 3 more" in kernel_speech.intake_trigger("plan", wid, "T", many))
 
-    # The wiring: the runner computes this only for a thread it is RESUMING.
+    # The wiring: the runner computes this only for a thread it is resuming.
     runs_src = src("superme_agent/daemon/services/runs.py")
     guard = runs_src.split("    changed: list[str] = []", 1)[-1].split("trigger =", 1)[0]
     ok("the intake runner asks only when it has a prior thread",
@@ -300,10 +299,7 @@ def test_titles() -> None:
 
 
 def test_one_reader() -> None:
-    """`_session_fields` owns the fallback chain, so no runner may re-implement it.
-
-    A caller that reaches for the retired `intake` slot itself gets None where the computed
-    `session_id` would have answered — the close run resumed nothing for nine live runs that way."""
+    """`_session_fields` owns the fallback chain, so no runner may re-implement it."""
     print("runners resolve resume through the computed session_id, not the retired slot")
     import superme_agent.daemon.services.gates as _gates
     from superme_agent.daemon.services.runs import background as _bg

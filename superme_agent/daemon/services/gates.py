@@ -1,6 +1,6 @@
 """Gate transitions — the advance core, shared by the owner's route and the autopilot driver.
 
-`advance_item` is the phase-advance body lifted out of the HTTP handler so both callers share ONE
+`advance_item` is the phase-advance body lifted out of the HTTP handler so both callers share one
 implementation; they differ solely in `actor`.
 """
 
@@ -21,8 +21,7 @@ log = logging.getLogger("superme-agent")
 def _compact_then_readvance(ctx, context_id: str, item_id: str, item: dict) -> bool:
     """The background chain's run-start compaction check.
 
-    True means one was scheduled and the caller must return. The session checked is the one the
-    phase that just ran left behind; nothing accumulates across phases."""
+    True means one was scheduled."""
     from . import compaction
     session_id = item.get("session_id")
     if compaction.due(session_id, item.get("kind")) is None:
@@ -49,10 +48,7 @@ def _compact_then_readvance(ctx, context_id: str, item_id: str, item: dict) -> b
 
 
 def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
-    """Called after a background phase run rests an item at its gate.
-
-    Autopilot removes the waiting; the judgment is the deputy's. Without one, review is left for the
-    owner."""
+    """Called after a background phase run rests an item at its gate."""
     from .. import app_state
     from ..app_state import get_spine
     from ...gateway import contexts
@@ -81,7 +77,7 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
                 from . import prompt_extraction as px
                 px.teardown(context_id, item_id, reason="probe reached close")
             elif autopilot_core.throwaway_advance_target(item, kind_profiles.next_phase):
-                # The probe IS autopilot-driven; `prompt-extraction` is a run feature tag, never
+                # The probe is autopilot-driven; `prompt-extraction` is a run feature tag, never
                 # an actor.
                 autopilot_advance(ctx, context_id, item_id, actor="autopilot")
             return
@@ -118,9 +114,7 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
 
 
 async def enter_build_loop(context_id: str, item_id: str) -> None:
-    """An item just entered `build`, so launch the autonomous build⟷vet loop it now owes.
-
-    Fires for every item, because approving the plan gate is the instruction to build."""
+    """An item just entered build, so launch the loop it now owes."""
     from .. import app_state
     from ...gateway import contexts
     from . import loop as loop_svc
@@ -141,9 +135,7 @@ async def enter_build_loop(context_id: str, item_id: str) -> None:
 
 
 def autopilot_advance(ctx, context_id: str, item_id: str, *, actor: str):
-    """Cap-aware phase advance for an autopilot or deputy transition.
-
-    Parks at `awaiting_slot` when the next phase is `build` and the repo's cap is full."""
+    """Cap-aware phase advance for an autopilot or deputy transition."""
     from .. import app_state
     from ..app_state import get_spine
     dev = app_state.dev
@@ -175,9 +167,7 @@ def autopilot_advance(ctx, context_id: str, item_id: str, *, actor: str):
 
 
 def pump_autopilot_slots(context_id: str) -> None:
-    """A build⟷vet slot just freed — release the next queued autopilot items into build.
-
-    Advances the oldest-queued `awaiting_slot` items up to the number of free slots. Idempotent."""
+    """A loop slot just freed, so release the next queued items."""
     from .. import app_state
     from ..app_state import get_spine
     from ...gateway import contexts
@@ -212,10 +202,7 @@ def pump_autopilot_slots(context_id: str) -> None:
 
 def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
                  actor: str) -> dict:
-    """Advance a work-item to its kind's next phase.
-
-    Raises on the refusals the route always enforced: terminal, run in flight, no next phase, an
-    un-gate-ready plan."""
+    """Advance a work-item to its kind's next phase."""
     if not ctx.internal_root:
         raise HTTPException(status_code=400, detail="context has no internal root")
     dev_root = ctx.internal_root / "dev"
@@ -233,7 +220,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         raise HTTPException(status_code=409, detail=str(e))
     if not nxt:
         raise HTTPException(status_code=409, detail=f"phase {cur} has no next phase")
-    # Only a kind that PLANS is asked for its plan; research enters `investigate` straight from
+    # Only a kind that plans is asked for its plan; research enters `investigate` straight from
     # triage and has no plan.md.
     git_record = None
     profile = kind_profiles.get_profile(item.get("kind"))
@@ -344,7 +331,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
     # item back.
     auto_skill = {"plan": "plan", "investigate": "investigate"}.get(nxt)
     if str(item.get("kind")) == "research" and nxt == "close":
-        # Approving research IS the itemization decision, so without this the approval means
+        # Approving research is the itemization decision, so without this the approval means
         # nothing.
         auto_skill = "itemize"
         # Owner approvals only: an over-broad rule suppresses questions that should have reached
@@ -392,11 +379,11 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         from .learning import _fire_sweep_bg
         _fire_sweep_bg(ctx, item.get("session_id"))
     log.info("advanced work-item %s: %s → %s (actor=%s)", item_id, cur, nxt, actor)
-    # Phase-entry effects hang off the TRANSITION, not the caller, so an item never lands at a
+    # Phase-entry effects hang off the transition, not the caller, so an item never lands at a
     # phase and just sits.
     autopiloted = autopilot_core.is_autopilot(item)
     if nxt == "build":
-        # NOT autopilot-gated: approving the plan gate IS the instruction to build, and build⟷vet
+        # NOT autopilot-gated: approving the plan gate is the instruction to build, and build⟷vet
         # is human-free either way.
         try:
             asyncio.get_running_loop().create_task(enter_build_loop(context_id, item_id))
@@ -410,7 +397,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         except RuntimeError:
             pass
     elif nxt == "close":
-        # Fires for EVERY actor: there is no human step inside close, and `active` with no run is
+        # Fires for every actor: there is no human step inside close, and `active` with no run is
         # an idle stall.
         try:
             from .runs import fire_close_run

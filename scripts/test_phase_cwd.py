@@ -96,8 +96,7 @@ def test_the_branch_dies_with_its_worktree() -> None:
     ok("a removal that names no branch leaves it standing",
        kept["branch_deleted"] is None
        and rec2["branch"] in git("branch", "--list", rec2["branch"]).stdout)
-    # `remove_worktree` takes the item dir, not the repo dir above it. Left behind, that empty
-    # dir reads to the dashboard as a repo whose registry entry went missing.
+    # `remove_worktree` takes the item dir, not the repo dir above it.
     import shutil
     shutil.rmtree(root, ignore_errors=True)
     shutil.rmtree(git_layer.worktree_dir("probe", "item-a").parent, ignore_errors=True)

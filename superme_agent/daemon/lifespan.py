@@ -46,9 +46,7 @@ def _backfill_session_stamps() -> None:
 
 
 def _reconcile_orphaned_sessions() -> None:
-    """Retire sessions whose work-item no longer exists on disk.
-
-    No disposal path covers a folder that leaves out of band, leaving a composer over nothing."""
+    """Retire sessions whose work-item no longer exists on disk."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -76,10 +74,9 @@ def _reconcile_orphaned_sessions() -> None:
 
 
 def _reconcile_expired_transcripts() -> None:
-    """Retire sessions whose TRANSCRIPT is gone.
+    """Retire sessions whose transcript is gone.
 
-    The CLI collects transcripts on a retention clock, so every session eventually meets it. Only
-    ever acts on a missing file."""
+    The CLI collects them on its own clock."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -97,9 +94,7 @@ def _reconcile_expired_transcripts() -> None:
 
 
 def _report_orphaned_repos() -> None:
-    """Say out loud when a repo's work is on disk but its registry entry is not.
-
-    A lost entry looks exactly like a repo nobody connected."""
+    """Say out loud when a repo's work is on disk but its entry is not."""
     try:
         for row in app_state.spine.orphaned_repos():
             log.warning("registry: '%s' has work on disk but no entry in repos.yaml — %s. "
@@ -110,10 +105,7 @@ def _report_orphaned_repos() -> None:
 
 
 def _reconcile_worktrees() -> None:
-    """Reconcile recorded worktrees against disk and branches, per repo.
-
-    Heals a kill-mid-create, reports what it cannot fix, and finishes a terminal cleanup a dying daemon
-    dropped."""
+    """Reconcile recorded worktrees against disk and branches, per repo."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -152,7 +144,7 @@ def _reconcile_worktrees() -> None:
         log.exception("worktree reconciliation failed (non-fatal)")
 
 
-# Run features that ARE a phase's own background work; for everything else, re-running the phase
+# Run features that are a phase's own background work; for everything else, re-running the phase
 # re-runs nothing.
 _AUTO_RESUME_FEATURES = {"triage", "plan", "build", "vet", "investigate", "review", "close"}
 # A restart after an outage can strand a cohort, and firing all at once spends tokens nobody asked
@@ -161,10 +153,8 @@ _MAX_AUTO_RESUME = 3
 
 
 def _reconcile_orphaned_items(orphans: list[dict]) -> None:
-    """Heal the work-items whose run the spine just flipped to `aborted`.
-
-    Two acts: label every orphan `error`, then resume those whose run was a phase's own."""
-    # The WHOLE body is guarded: housekeeping must never be able to stop the daemon booting.
+    """Heal the work-items whose run the spine just flipped to aborted."""
+    # The whole body is guarded: housekeeping must never be able to stop the daemon booting.
     from .services.resume import resume_item
     try:
         # What was actually running when the daemon died. Last writer wins on an item with two
@@ -228,10 +218,7 @@ def _reconcile_orphaned_items(orphans: list[dict]) -> None:
 
 
 def _reconcile_stranded_proposals() -> None:
-    """Free the learning proposals a dead `write` run left mid-flight.
-
-    `writing` is transient, so one left there is invisible to every queue. The honest reset is back
-    to `proposed`."""
+    """Free the learning proposals a dead write run left mid-flight."""
     try:
         freed = 0
         for rid in app_state.spine.repos():
@@ -253,10 +240,9 @@ def _reconcile_stranded_proposals() -> None:
 
 
 def _reconcile_close_steps() -> None:
-    """A terminal transition is an ordered, re-runnable step list, so a daemon dying mid-close leaves
-    unfinished steps, healed here on the next start.
+    """A terminal transition is an ordered, re-runnable step list.
 
-    The worktree step belongs to `_reconcile_worktrees`."""
+    A daemon dying mid-way resumes."""
     from ..core.vocab import status_router
     from .services import scheduler
     from .services.runs import render_execution_md
@@ -341,7 +327,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",
              SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS, app_state.spine.get_learning_enabled())
-    # The reconcilers above cover runs whose task died WITH the daemon; the watchdog covers one
+    # The reconcilers above cover runs whose task died with the daemon; the watchdog covers one
     # still alive inside it.
     stall_task = asyncio.create_task(watchdog.watch_loop())
     log.info("stall watchdog started (every %ds, stall threshold %ds)",

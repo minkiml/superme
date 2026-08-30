@@ -1,6 +1,6 @@
 """The three run guardrails: a subagent cap, a stall detector, an isolated tree.
 
-The cap must TELL the agent it was capped, because a silently narrowed sweep reads at the gate
+The cap must tell the agent it was capped, because a silently narrowed sweep reads at the gate
 like a complete one.
 
 Run: PYTHONPATH=. python -m scripts.test_guardrails
@@ -59,7 +59,7 @@ def test_the_budget_is_per_turn():
         spent = build_can_use_tool(deny_all)
         for _ in range(MAX_SUBAGENTS):
             await spent("Agent", {}, None)
-        fresh = build_can_use_tool(deny_all)          # a NEW turn = a new callback
+        fresh = build_can_use_tool(deny_all)  # a new turn = a new callback
         return await spent("Agent", {}, None), await fresh("Agent", {}, None)
     exhausted, new_turn = asyncio.run(run())
     ok("a spent turn cannot spawn again", not allowed(exhausted))
@@ -73,7 +73,7 @@ def test_both_spawn_names_are_covered():
 
 
 def test_the_cap_is_on_by_default():
-    # Default-ON where every turn's options are built: a runner that forgot it would be the run
+    # Default-on where every turn's options are built: a runner that forgot it would be the run
     # nobody could stop.
     perms = src("superme_agent/core/permissions.py")
     ok("the cap defaults to the policy value, not to None",
@@ -98,7 +98,7 @@ def _run_row(minutes_quiet: float, **kw) -> dict:
 
 
 def test_the_stall_rule(monkeypatched=None):
-    # Every fixture is a MEASURED shape: a healthy rhythm, a post-fan-out synthesis pause, and the
+    # Every fixture is a measured shape: a healthy rhythm, a post-fan-out synthesis pause, and the
     # incident this exists for.
     rows = [_run_row(2 / 60), _run_row(70 / 60), _run_row(21), _run_row(24)]
     watchdog._spine.live_item_runs_quiet_since = lambda: rows      # noqa: SLF001 — the read, stubbed
@@ -119,7 +119,7 @@ def test_the_stall_rule(monkeypatched=None):
 
 
 def test_quiet_since_falls_back_to_the_start():
-    # A run that emitted NOTHING ages from its own start, or a hung first call is invisible
+    # A run that emitted nothing ages from its own start, or a hung first call is invisible
     # forever.
     spine = src("superme_agent/core/spine.py")
     ok("the read coalesces the newest event with the run's start",
@@ -155,18 +155,16 @@ def test_the_registry_is_bound_where_every_item_run_passes():
 
 
 def test_disposal_stops_the_task_not_just_the_row():
-    """A disposed item must stop RUNNING, not merely stop claiming to run.
-
-    The row half alone let a turn outlive its item and write into a folder being removed."""
+    """A disposed item must stop running, not merely stop being listed."""
     runs = src("superme_agent/daemon/services/runs.py")
-    # The CODE, not the docstring above it — which names both halves while explaining the order.
+    # The code, not the docstring above it — which names both halves while explaining the order.
     body = runs.split("def stop_item_work", 1)[1].split('"""')[2]
     cancel, release = body.index("run_tasks.cancel"), body.index("release_item_runs")
     ok("the pairing cancels the task before releasing the rows", cancel < release)
     ok("…and releases them unconditionally — cancellation may never land",
        "freed = _spine.release_item_runs" in body)
 
-    # Every path that DISPOSES of an item goes through the pairing, never the row half alone.
+    # Every path that disposes of an item goes through the pairing, never the row half alone.
     for path, who in (("superme_agent/daemon/services/clearance.py", "clearance"),
                       ("superme_agent/daemon/routers/dev/gates.py", "abandon"),
                       ("superme_agent/daemon/services/prompt_extraction.py", "probe teardown")):
@@ -183,7 +181,7 @@ def test_disposal_stops_the_task_not_just_the_row():
     ok("disposal does not shout when there is nothing to cancel — that is the normal case",
        run_tasks.cancel("r", "nobody", expect_live=False) is False)
 
-    # THE SAFETY PROPERTY: a still-registered item would cancel its own closing run, so the loop
+    # The safety property: a still-registered item would cancel its own closing run, so the loop
     # must not break.
     turns = src("superme_agent/daemon/services/turns.py")
     ok("the registration is released in the stream's finally", "finally:" in turns
@@ -256,7 +254,7 @@ def test_the_tree_is_detached_and_disposable():
                not [a for a in acts if a.get("action") == "broken"])
         finally:
             git_layer.remove_worktree(repo, "testrepo", "aaaabbbbcccc")
-            # The worktrees home is OUTSIDE the temp dir, so the suite must take its own parent
+            # The worktrees home is outside the temp dir, so the suite must take its own parent
             # back.
             root = git_layer.worktrees_root("testrepo")
             if root.is_dir() and not any(root.iterdir()):
@@ -276,7 +274,7 @@ def test_creation_and_cleanup_are_wired():
     ok("…and falls back to the live repo rather than failing a run", "return ctx.cwd" in ops)
     ok("the tree is recorded as the item's git_worktree, which is what cleanup reads",
        "git_worktree=rec[\"worktree\"]" in ops)
-    # CLEARANCE: the scratch tree rides the SAME path, so it cannot grow its own forgotten
+    # Clearance: the scratch tree rides the same path, so it cannot grow its own forgotten
     # cleanup.
     clear = src("superme_agent/daemon/services/clearance.py")
     drop = src("superme_agent/daemon/routers/dev/gates.py")
@@ -322,7 +320,7 @@ def test_the_total_counts_subagents_and_cannot_kill_a_run():
                    "cache_read_input_tokens": cr, "output_tokens": o})
         live.bump("r", "i", step("m1", 10, 100, 5000, 20))     # the parent
         live.bump("m1-dup", "i", step("m1", 10, 100, 5000, 25))  # same call, later step → replaces
-        live.bump("r", "i", step("m2", 5, 50, 4000, 500))      # a SUBAGENT's call, same stream
+        live.bump("r", "i", step("m2", 5, 50, 4000, 500))  # a subagent's call, same stream
         u = live.usage()
         ok("one entry per API call — a repeated message_id replaces, never doubles",
            u["output_tokens"] == 25 + 500)
@@ -344,12 +342,10 @@ def test_the_total_counts_subagents_and_cannot_kill_a_run():
         RN._spine = real
 
 
-# ── 5 · nothing about DESCRIBING the work may stop it ───────────────────────────────────────────
+# ── 5 · nothing about describing the work may stop it ───────────────────────────────────────────
 
 def test_a_trail_row_cannot_kill_a_run():
-    """A malformed tool argument must not kill the run that made it.
-
-    One raised out of the trail formatter and the run's own task, leaving the row `running`."""
+    """A malformed tool argument must not kill the run that made it."""
     from superme_agent.daemon.services.runs import _artifact_desc, capture_event
 
     ok("the exact killer input now formats instead of raising",

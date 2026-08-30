@@ -1,6 +1,6 @@
 """The work-item drilldown's payload, its per-phase report reads, and the human-only abandon path.
 
-This layer only GATHERS inputs; the payload is assembled in `services/drilldown`, so the drilldown
+This layer only gathers inputs; the payload is assembled in `services/drilldown`, so the drilldown
 and the deputy read one computation of a gate's checks.
 """
 
@@ -40,9 +40,7 @@ def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
 @router.get("/dev/work-items/{item_id}/report/{phase}", response_model=PhaseReportResponse)
 async def dev_work_item_report(item_id: str, phase: str, context_id: str = "global",
                                dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """One phase's user-facing report, plus the path to the contract behind it.
-
-    404 when that phase wrote none, so the tab greys itself rather than probing."""
+    """One phase's report, plus the path to the contract behind it."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     report = artifacts.report_text(dev_root / "work-items" / item_id, phase)
     if report is None:
@@ -53,9 +51,7 @@ async def dev_work_item_report(item_id: str, phase: str, context_id: str = "glob
 @router.get("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
 async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
                                     dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """What the owner has written into the one section of the item that is theirs.
-
-    Never 404s: `exists: false` says triage has not written a brief yet."""
+    """The one section of the item that is the owner's to write."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     return artifacts.owner_input(dev_root / "work-items" / item_id)
 
@@ -63,9 +59,7 @@ async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
 @router.put("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
 async def dev_work_item_set_owner_input(item_id: str, body: OwnerInputBody,
                                         dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """Save the owner's own section, replacing it whole and leaving the rest untouched.
-
-    HUMAN-ONLY: the value of the section is that an agent did not write it."""
+    """Save the owner's own section, replacing it whole."""
     _ctx, dev_root, _item = _load(body.context_id, item_id, dev)
     try:
         return artifacts.write_owner_input(
@@ -81,16 +75,13 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   dev_store: DevStore = Depends(get_dev_store),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Everything the drilldown renders, computed once.
-
-    Server-computed activation is the point: a greying rule that lives in the component sits beside the
-    rule the backend actually enforces."""
+    """Everything the drilldown renders, computed once."""
     ctx, dev_root, item = _load(context_id, item_id, dev)
     # Without the enrich a working agent renders as idle: the Now strip reads `running`.
     live_by_item = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
     dev.enrich_work_items(dev_root, [item], live_by_item, spine.run_stats(context_id, mode="dev"))
     events = dev_store.list_events(context_id, item_id=item_id, limit=100)
-    # The landing rule is a REPO fact, read unconditionally: it must not ride a nullable carrier
+    # The landing rule is a repo fact, read unconditionally: it must not ride a nullable carrier
     # that answers another question.
     review_mode = git_ops.repo_review_mode(ctx, spine)
     git_health = None
@@ -107,7 +98,7 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
     if item.get("inbox_id"):
         row = dev_store.get_inbox(int(item["inbox_id"])) or {}
         inbox_origin = "agent" if "agent" in (row.get("origin") or []) else "user"
-    # Read in ONE place the deputy shares, so the two sides of a gate can never be shown different
+    # Read in one place the deputy shares, so the two sides of a gate can never be shown different
     # rows.
     return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, git_health=git_health,
@@ -144,9 +135,9 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     # nothing.
     from ...services.runs import stop_item_work
     runs_freed, _ = stop_item_work(body.context_id, item_id)
-    for sid in dev.work_item_session_ids(item):   # ALL role threads (intake/build/vet + legacy)
+    for sid in dev.work_item_session_ids(item):  # All role threads (intake/build/vet + legacy)
         sessions.delete(ctx, sid, cause="retired")
-    # 2. worktree dir removed, branch KEPT. Never blocks the abandon.
+    # 2. worktree dir removed, branch kept. Never blocks the abandon.
     worktree_removed = None
     if item.get("git_worktree"):
         try:
@@ -155,7 +146,7 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False
             log.warning("abandon: worktree cleanup failed for %s: %s", item_id, e)
-    # An abandon IS how this item closed, so it is recorded in the close report. Code writes the
+    # An abandon is how this item closed, so it is recorded in the close report. Code writes the
     # whole file.
     item_dir = dev_root / "work-items" / item_id
     report = item_dir / "reports" / "report-close.md"
@@ -178,7 +169,7 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     # The owner's own ending is its own read receipt; a completed close still pages, because that
     # is genuinely news.
     dev.set_work_item_seen(dev_root, item_id)
-    # 5. a paused parent whose last open BLOCKING child this was resumes (typed-awaiting router).
+    # 5. a paused parent whose last open blocking child this was resumes (typed-awaiting router).
     for it in all_items:
         if it.get("id") == item_id:
             it["status"] = "done"

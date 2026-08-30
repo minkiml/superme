@@ -1,4 +1,4 @@
-"""Maps a work-item KIND to its machinery: phases, worktree, knowledge writes, artifacts.
+"""Maps a work-item kind to its machinery: phases, worktree, knowledge writes, artifacts.
 
 Unknown kinds fail loud.
 """
@@ -11,7 +11,7 @@ class KindProfile:
     kind: str
     # Ordered: first is triage, last is close.
     phases: tuple[str, ...]
-    # Does this kind LAND code?
+    # Does this kind land code?
     worktree: bool
     knowledge_writes: bool
     # Detached read-only checkout: isolation without a landing.
@@ -56,7 +56,7 @@ KIND_PROFILES: dict[str, KindProfile] = {
 
 DEFAULT_KIND = "implementation"
 
-# Kind decides the MACHINERY, scale decides how much CONTENT moves through it.
+# Kind decides the machinery, scale decides how much content moves through it.
 ITEM_SCALES: tuple[str, ...] = ("small", "standard")
 DEFAULT_SCALE = "standard"
 
@@ -83,7 +83,7 @@ class ResearchFamily:
     slug: str
     # Subject is the codebase → launches from a button. Else ticket-born.
     standing: bool
-    # "Is this sound?" means nothing until you say sound in WHAT.
+    # "Is this sound?" means nothing until you say sound in what.
     asks_interest: bool
     icon: str
     blurb: str
@@ -114,12 +114,12 @@ RESEARCH_KINDS: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES)
 
 
 def family_guide(slug: str) -> str:
-    """Guide path for a family. The slug IS the filename."""
+    """Guide path for a family. The slug is the filename."""
     return f"references/{slug}.md"
 
 
 def family_template(slug: str) -> str:
-    """Investigation template name. Same rule: the slug IS the shape."""
+    """Investigation template name. Same rule: the slug is the shape."""
     return f"investigation-{slug}"
 
 
@@ -142,7 +142,7 @@ ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
 ))
 
 
-# A session belongs to a PHASE: re-entering resumes its thread, moving to another mints one.
+# A session belongs to a phase: re-entering resumes its thread, moving to another mints one.
 INTAKE_PHASES: tuple[str, ...] = ("triage", "plan", "investigate", "review", "close")
 SESSION_SLOTS: tuple[str, ...] = (*INTAKE_PHASES, "build", "vet")
 # Read-only, never written again.
@@ -173,7 +173,7 @@ _SLOT_FOR_PHASE: dict[str, str] = {**{p: p for p in INTAKE_PHASES}, "build": "bu
 
 
 def session_slot(phase: str | None) -> str:
-    """The SLOT a phase's turns are stored in. Unknown phases fail LOUD."""
+    """The slot a phase's turns are stored in. Unknown phases fail loud."""
     p = phase or "triage"
     if p not in _SLOT_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session slot — known: {sorted(_SLOT_FOR_PHASE)}")
@@ -181,7 +181,7 @@ def session_slot(phase: str | None) -> str:
 
 
 def session_role(phase: str | None) -> str:
-    """The spine session KIND a phase is stamped with. Not the storage slot."""
+    """The spine session kind a phase is stamped with. Not the storage slot."""
     p = phase or "triage"
     if p not in _ROLE_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session role — known: {sorted(_ROLE_FOR_PHASE)}")
@@ -201,7 +201,7 @@ def phase_uses_worktree(phase: str | None, kind: str | None = None) -> bool:
 
 
 def get_profile(kind: str | None) -> KindProfile:
-    """The profile for `kind`. LOUD KeyError on an unknown one; missing reads as DEFAULT_KIND."""
+    """The profile for `kind`. Loud KeyError on an unknown one; missing reads as DEFAULT_KIND."""
     k = kind or DEFAULT_KIND
     if k not in KIND_PROFILES:
         raise KeyError(

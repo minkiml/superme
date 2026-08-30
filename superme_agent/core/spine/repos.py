@@ -22,8 +22,7 @@ class RepoOps:
         return self.repos().get(repo_id)
 
     def add_repo(self, rc: RepoConfig) -> RepoConfig:
-        """Register a new repo by APPENDING to config/repos.yaml, so header comments survive.
-        `repos()` re-reads every call, so it goes live at once."""
+        """Register a new repo by appending to the config, so header comments survive."""
         import textwrap
         current = self.repos()
         if rc.id in current:
@@ -57,7 +56,7 @@ class RepoOps:
             raise ValueError(f"review_mode must be one of {list(REVIEW_MODES)}")
         # An empty string clears a field, and clearing means dropping its line.
         patch = {k: (v.strip() if isinstance(v, str) else v) or None for k, v in fields.items()}
-        # A field set back to its DEFAULT is stored as absence, so setting and unsetting leaves
+        # A field set back to its default is stored as absence, so setting and unsetting leaves
         # the file byte-identical.
         if patch.get("review_mode") == REVIEW_MODE_DEFAULT:
             patch["review_mode"] = None
@@ -100,7 +99,7 @@ class RepoOps:
         return updated
 
     def remove_repo(self, repo_id: str) -> RepoConfig:
-        """Deregister a repo: drop its entry and its runtime kv rows. Forgets the REGISTRATION
+        """Deregister a repo: drop its entry and its runtime kv rows. Forgets the registration
         only. Refuses `global`."""
         if repo_id == "global":
             raise ValueError("the hub repo cannot be disconnected")
@@ -140,9 +139,7 @@ class RepoOps:
                     for r in c.execute("SELECT * FROM archived_repo").fetchall()}
 
     def orphaned_repos(self) -> list[dict]:
-        """Repos with work on disk, no registry entry, and no tombstone explaining it.
-
-        Their items still exist and nothing can reach them."""
+        """Repos with work on disk, no registry entry, and no tombstone."""
         from ...paths import KNOWLEDGE_REPO_DIR
         from ..git_layer import worktrees_home
 
@@ -157,8 +154,8 @@ class RepoOps:
                 rid = p.name[:-len(suffix)] if suffix and p.name.endswith(suffix) else p.name
                 if suffix and not p.name.endswith(suffix):
                     continue
-                # A worktree home outlives its items, and empty it holds nothing to strand. A
-                # knowledge home's existence is itself the evidence.
+                # A worktree home outlives its items. A knowledge home's existence is itself the
+                # evidence.
                 if suffix == "" and not any(p.iterdir()):
                     continue
                 if rid and rid not in known:
@@ -176,8 +173,9 @@ class RepoOps:
 
     # --- startup reconcile ------------------------------------------------------
     def reconcile(self) -> list[dict]:
-        """On startup, flip orphaned `running` runs to `aborted`. Returns one row per orphan so
-        the caller can heal the item too."""
+        """On startup, flip orphaned running runs to aborted.
+
+        One row per orphan."""
         with self._conn() as c:
             orphans = [dict(r) for r in c.execute(
                 "SELECT id AS run_id, repo_id, item_id, phase, feature FROM run"
@@ -213,9 +211,7 @@ class RepoOps:
     # --- counts (for repo×scope summaries on the monitor dashboard) -------------
     def session_count(self, repo_id: str, mode: str | None = None, *,
                       include_agent_threads: bool = False) -> int:
-        """How many CHANNELS this repo has, so the tile and the list cannot disagree.
-
-        A work-item runs a thread per phase but is ONE channel."""
+        """How many channels this repo has, so the tile and the list cannot disagree."""
         where = ["repo_id=?"]
         args: list = [repo_id]
         if mode is not None:
@@ -240,7 +236,7 @@ class RepoOps:
                              args).fetchone()[0]
 
     def live_agent_runs(self, repo_id: str, mode: str) -> dict:
-        """The RUN-based half of the agent metric. Idle in-progress items have no live run
+        """The run-based half of the agent metric. Idle in-progress items have no live run
         and are counted from the store."""
         learn = tuple(sorted(LEARNING_FEATURES))
         qmarks = ",".join("?" * len(learn))
@@ -270,7 +266,7 @@ class RepoOps:
         return {
             "identity": cfg.identity,
             "version": cfg.version,
-            # What a repo with NO override runs. Not settable here — a repo sets its own.
+            # What a repo with no override runs. Not settable here — a repo sets its own.
             "default_model": self.effective_system_model(),
             "default_effort": self.effective_system_effort(),
             "policy_version": cfg.policy_version,
