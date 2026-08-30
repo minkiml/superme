@@ -5,7 +5,7 @@
    "home": "superme_agent.core.agent_service",
    "methods": [
     "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, item_bound: bool = False, charter_key: str | None = None) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
     "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
@@ -14,7 +14,7 @@
     "assemble_system_fragments(self, ctx: Context, *, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "compose_prompt(preamble: str | None, prompt: str) -> str",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -192,9 +192,12 @@
   "VET_READONLY_NUDGE": {
    "sig": "value:str"
   },
+  "WRONG_TREE_NUDGE": {
+   "sig": "value:str"
+  },
   "build_can_use_tool": {
    "home": "superme_agent.core.permissions",
-   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
+   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
   },
   "deny_all": {
    "home": "superme_agent.core.permissions",
@@ -214,7 +217,7 @@
    "home": "superme_agent.core.agent_service",
    "methods": [
     "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, item_bound: bool = False, charter_key: str | None = None) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
     "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
@@ -223,7 +226,7 @@
     "assemble_system_fragments(self, ctx: Context, *, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "compose_prompt(preamble: str | None, prompt: str) -> str",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -233,10 +236,16 @@
   "CONSTITUTION_DIR": {
    "sig": "value:Path"
   },
+  "CORE_PLUGIN_DIR": {
+   "sig": "value:Path"
+  },
   "Context": {
    "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
+  },
+  "DEV_PLUGIN_DIR": {
+   "sig": "value:Path"
   },
   "DevKnowledgeService": {
    "home": "superme_agent.core.dev_knowledge.store",
@@ -363,6 +372,10 @@
    "home": "superme_agent.core.agent_service",
    "sig": "def(content) -> str"
   },
+  "_skills_root": {
+   "home": "superme_agent.core.agent_service",
+   "sig": "def(mode: str) -> pathlib.Path | None"
+  },
   "_sum_tokens": {
    "home": "superme_agent.core.agent_service",
    "sig": "def(usage: dict | None) -> int"
@@ -371,9 +384,13 @@
    "home": "superme_agent.core.agent_service",
    "sig": "def(model_usage: dict | None, model: str | None) -> int | None"
   },
+  "_with_single_turn_hook": {
+   "home": "superme_agent.core.agent_service",
+   "sig": "def(hooks: dict | None, has_later_turn: bool) -> dict | None"
+  },
   "build_can_use_tool": {
    "home": "superme_agent.core.permissions",
-   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
+   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
   },
   "cli_stderr_tail": {
    "home": "superme_agent.core.agent_service",
@@ -998,6 +1015,10 @@
   "repo_fingerprint": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(repo_dir: pathlib.Path | None) -> str"
+  },
+  "report_body_issues": {
+   "home": "superme_agent.core.artifacts.reports",
+   "sig": "def(body: str) -> list[str]"
   },
   "report_issues": {
    "home": "superme_agent.core.artifacts.reports",
@@ -1644,7 +1665,13 @@
   "_DEAD_VALUES": {
    "sig": "value:set"
   },
+  "_FENCE": {
+   "sig": "value:Pattern"
+  },
   "_HEADING": {
+   "sig": "value:Pattern"
+  },
+  "_JUNK_THEN_HEADING": {
    "sig": "value:Pattern"
   },
   "_LABEL_LINE": {
@@ -1654,6 +1681,9 @@
    "sig": "value:Pattern"
   },
   "_OWNER_DECISION": {
+   "sig": "value:Pattern"
+  },
+  "_PLACEHOLDER": {
    "sig": "value:Pattern"
   },
   "_dead_label": {
@@ -1702,6 +1732,10 @@
   "proposed_work": {
    "home": "superme_agent.core.artifacts.reports",
    "sig": "def(item_dir: pathlib.Path) -> str"
+  },
+  "report_body_issues": {
+   "home": "superme_agent.core.artifacts.reports",
+   "sig": "def(body: str) -> list[str]"
   },
   "report_issues": {
    "home": "superme_agent.core.artifacts.reports",
@@ -3652,6 +3686,10 @@
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path) -> bool"
   },
+  "item_diff": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(worktree: pathlib.Path, base: str, *, path: str | None = None, char_cap: int = 24000) -> dict"
+  },
   "list_branches": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path) -> list[str]"
@@ -3889,6 +3927,10 @@
   "_format_trace": {
    "home": "superme_agent.core.kernel_speech",
    "sig": "def(run: dict, events: list[dict]) -> str"
+  },
+  "_materials_on_disk": {
+   "home": "superme_agent.core.kernel_speech",
+   "sig": "def(item_dir) -> str"
   },
   "_shell_is_in": {
    "home": "superme_agent.core.kernel_speech",
@@ -4362,7 +4404,13 @@
   "VET_READONLY_NUDGE": {
    "sig": "value:str"
   },
+  "WRONG_TREE_NUDGE": {
+   "sig": "value:str"
+  },
   "_ASK_IN_TEXT_NUDGE": {
+   "sig": "value:str"
+  },
+  "_BACKGROUND_SUBAGENT_NUDGE": {
    "sig": "value:str"
   },
   "_BASH_MULTIPLEXERS": {
@@ -4404,6 +4452,12 @@
   "_GIT_READONLY": {
    "sig": "value:frozenset"
   },
+  "_GIT_REDIRECTS": {
+   "sig": "value:tuple"
+  },
+  "_HEAD_REV": {
+   "sig": "value:Pattern"
+  },
   "_HOOK_BYPASS_FLAGS": {
    "sig": "value:set"
   },
@@ -4421,6 +4475,12 @@
   },
   "_LEARNING_SCOPE_DENIED": {
    "sig": "value:str"
+  },
+  "_NO_LATER_TURN_NUDGE": {
+   "sig": "value:str"
+  },
+  "_NO_LATER_TURN_TOOLS": {
+   "sig": "value:set"
   },
   "_NO_VERIFY_NUDGE": {
    "sig": "value:str"
@@ -4526,7 +4586,7 @@
   },
   "build_can_use_tool": {
    "home": "superme_agent.core.permissions",
-   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
+   "sig": "def(approve: Callable[[str, dict], Awaitable[bool | str]], *, blocked_skills: dict[str, str] | None = None, cwd: pathlib.Path | None = None, read_roots: list[pathlib.Path] | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, subagent_cap: int | None = 8)"
   },
   "bypasses_commit_hooks": {
    "home": "superme_agent.core.permissions",
@@ -4563,6 +4623,10 @@
    "home": "superme_agent.core.permissions",
    "sig": "def(command: str) -> bool"
   },
+  "reads_ambient_head": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(command: str) -> bool"
+  },
   "scoped_writes_approve": {
    "home": "superme_agent.core.permissions",
    "sig": "def(allowed_dir: pathlib.Path, fallback: Callable[[str, dict], Awaitable[bool | str]]) -> Callable[[str, dict], Awaitable[bool | str]]"
@@ -4570,6 +4634,10 @@
   "shlex_split_safe": {
    "home": "superme_agent.core.permissions",
    "sig": "def(command: str) -> list[str]"
+  },
+  "single_turn_hook": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def()"
   }
  },
  "superme_agent.core.plan_revision": {
@@ -6432,7 +6500,7 @@
    "home": "superme_agent.core.agent_service",
    "methods": [
     "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, item_bound: bool = False, charter_key: str | None = None) -> str",
-    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> claude_agent_sdk.types.ClaudeAgentOptions",
     "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
     "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
@@ -6441,7 +6509,7 @@
     "assemble_system_fragments(self, ctx: Context, *, preamble: str | None = None, item_bound: bool = False, charter_key: str | None = None) -> list[dict]",
     "compose_prompt(preamble: str | None, prompt: str) -> str",
     "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = True, scope_reads: bool = False, preamble: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, wrong_tree_nudge: str | None = None, has_later_turn: bool = False, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False, charter_key: str | None = None) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -13549,7 +13617,7 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   },
   "mark_item_error": {
    "home": "superme_agent.daemon.services.runs.lifecycle",
@@ -14054,6 +14122,9 @@
    "methods": [],
    "sig": "class"
   },
+  "WRONG_TREE_NUDGE": {
+   "sig": "value:str"
+  },
   "_agent": {
    "sig": "value:AgentService"
   },
@@ -14122,11 +14193,15 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   },
   "mark_item_error": {
    "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "phase_exit_check": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(skill: str, item_dir: pathlib.Path, kind: str | None)"
   },
   "reset_vet_thread": {
    "home": "superme_agent.daemon.services.runs.checkpoints",
@@ -14402,7 +14477,7 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   },
   "mark_item_error": {
    "home": "superme_agent.daemon.services.runs.lifecycle",
@@ -14455,7 +14530,7 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   },
   "read_completion": {
    "home": "superme_agent.daemon.services.runs.completion",
@@ -14680,11 +14755,15 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   },
   "mark_item_error": {
    "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "phase_exit_check": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(skill: str, item_dir: pathlib.Path, kind: str | None)"
   },
   "retry_notice": {
    "home": "superme_agent.daemon.services.runs.lifecycle",
@@ -15463,6 +15542,11 @@
   }
  },
  "superme_agent.harness.tools.dev_tools.items": {
+  "ReadItemDiffArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
   "ScaffoldArtifactArgs": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
@@ -15498,6 +15582,10 @@
   "_ok": {
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
+  },
+  "_read_item_diff": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_s": {
    "home": "superme_agent.harness.tools.dev_tools.render",
@@ -15967,6 +16055,11 @@
    "methods": [],
    "sig": "class"
   },
+  "ReadItemDiffArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
   "ReadResearchProposalsArgs": {
    "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
@@ -16132,6 +16225,10 @@
    "home": "superme_agent.harness.tools.dev_tools.records",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
+  "_read_item_diff": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
   "_read_research_proposals": {
    "home": "superme_agent.harness.tools.dev_tools.records",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
@@ -16253,6 +16350,9 @@
    "methods": [],
    "sig": "class"
   },
+  "_SYSTEM_ROOTS": {
+   "sig": "value:tuple"
+  },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(item_id, bound_item_id) -> str | None"
@@ -16277,6 +16377,10 @@
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
   },
+  "_plan_coverage": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(item_dir, kind: str | None) -> str"
+  },
   "_read_verification_library": {
    "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
@@ -16300,6 +16404,10 @@
   "_s": {
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(args: dict, k: str) -> str | None"
+  },
+  "_stray_run_blocks": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(item_dir, repo_dir) -> str"
   }
  },
  "superme_agent.harness.tools.registry": {
@@ -16420,6 +16528,10 @@
    "home": "superme_agent.harness.tools.run_tools",
    "sig": "def(esc: 'dict') -> 'str'"
   },
+  "_exit_blockers": {
+   "home": "superme_agent.harness.tools.run_tools",
+   "sig": "def(exit_check) -> 'str | None'"
+  },
   "_lines": {
    "home": "superme_agent.harness.tools.run_tools",
    "sig": "def(raw) -> 'list[str]'"
@@ -16434,7 +16546,7 @@
   },
   "_report_completion": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(*, completion_sink: 'dict | None' = None, **_)"
+   "sig": "def(*, completion_sink: 'dict | None' = None, exit_check=None, **_)"
   },
   "_submit_gate_verdict": {
    "home": "superme_agent.harness.tools.run_tools",
@@ -16453,7 +16565,7 @@
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
-   "sig": "def(sink: 'dict')"
+   "sig": "def(sink: 'dict', *, exit_check=None)"
   }
  },
  "superme_agent.paths": {

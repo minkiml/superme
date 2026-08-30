@@ -173,7 +173,10 @@ def test_runners_flip() -> None:
         "deputy": src("superme_agent/daemon/services/deputy.py"),
     }
     ok("intake + feedback + close runners mount the report_completion sink",
-       runs_src["runs"].count("make_run_report_server(sink)") == 4)
+       runs_src["runs"].count("make_run_report_server(") == 4)
+    # plan alone: its gate check is mechanical, so the run can fix what it is still holding.
+    ok("the two plan-capable runners carry an exit check",
+       runs_src["runs"].count("exit_check=phase_exit_check(") == 2)
     ok("the completion backstop exists and re-asks through the same sink",
        "async def ensure_completion" in runs_src["runs"]
        and runs_src["runs"].count("await ensure_completion(") == 3
