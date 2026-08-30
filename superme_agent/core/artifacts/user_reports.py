@@ -51,6 +51,10 @@ def _bold_lenses(text: str) -> str:
 
 
 _LENS_ANY = re.compile(r"(?i)\b(" + "|".join(LENSES) + r")\s*:")
+# A lens the author already emphasised still opens its bullet. `_LENS_LINE` matches only
+# the plain form, so bolding stays idempotent.
+_LENS_OPENER = re.compile(r"(?mi)^\s*[-*]\s+(?:[*_]{1,2})?(" + "|".join(LENSES)
+                          + r")(?:[*_]{1,2})?\s*:")
 
 
 def lens_slot_issues(text: str) -> list[str]:
@@ -62,12 +66,12 @@ def lens_slot_issues(text: str) -> list[str]:
     if not body:
         return []
     loose = [ln.strip() for ln in body.splitlines()
-             if _LENS_ANY.search(ln) and not _LENS_LINE.match(ln)]
+             if _LENS_ANY.search(ln) and not _LENS_OPENER.match(ln)]
     if loose:
         return ["`looked_at` runs its lenses together instead of giving each its own bullet. "
                 "Write one bullet per lens, opening with the lens name — `- Intent: ...` — "
                 f"one fact each, under 20 words. First line that does not: {loose[0][:70]!r}"]
-    if not _LENS_LINE.search(body):
+    if not _LENS_OPENER.search(body):
         return [f"`looked_at` opens no bullet with a lens. Each bullet starts with one of "
                 f"{', '.join(LENSES)}, as `- Intent: ...`."]
     return []

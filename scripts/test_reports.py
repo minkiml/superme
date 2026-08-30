@@ -320,7 +320,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
     # Vet writes an all-clear. The ledger says otherwise, and the ledger wins.
     text = Path(_arts.write_vet_user_report(
         item, None, summary="Everything holds.", confirms="- it all works",
-        looked_at="- read the diff")["path"]).read_text(encoding="utf-8")
+        looked_at="- Intent: read the diff against the brief.")["path"]).read_text(encoding="utf-8")
     ok("vet's own words are carried verbatim — this is its report",
        "**Summary:** Everything holds." in text and "- it all works" in text)
     ok("…but the failure lands anyway, in a section vet does not write",
@@ -333,12 +333,12 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
     # The template owns the headings, so a slot that repeats one ships it twice.
     echoed = Path(_arts.write_vet_user_report(
         item, None, summary="s", confirms="## What this confirms\n- it works",
-        looked_at="## What else was looked at\n- the diff",
+        looked_at="## What else was looked at\n- Intent: the diff",
         unknown="## What I can't tell you\n- nothing")["path"]).read_text(encoding="utf-8")
     for h in ("## What this confirms", "## What else was looked at", "## What I can't tell you"):
         ok(f"`{h}` is written once, not echoed", echoed.count(h) == 1)
     ok("…and the body under the echoed heading survives",
-       "- it works" in echoed and "- the diff" in echoed and "- nothing" in echoed)
+       "- it works" in echoed and "the diff" in echoed and "- nothing" in echoed)
     # The surface tints an opening bold, so a plain lens name renders grey.
     lensed = Path(_arts.write_vet_user_report(
         item, None, summary="s", confirms="- c",
@@ -670,8 +670,9 @@ def test_wiring():
        "mcp__dev__file_plan_report" in src("superme_agent/harness/policy.py"))
     skill = src("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md")
     ok("the plan skill files it instead of hand-writing the report", "file_plan_report" in skill)
+    # Whitespace-normalised: the rule is the sentence, not where the line happens to wrap.
     ok("…and treats an uncovered task as a question to answer, not a count to clear",
-       "Never write a check you don't believe in" in skill)
+       "Never write a check you don't believe in" in " ".join(skill.split()))
     tmpl = src("superme_agent/harness/plugins/superme-dev/skills/plan/templates/"
                "report-plan-template.md")
     ok("the template carries the confirmation table, not a prose slot for it",

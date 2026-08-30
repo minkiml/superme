@@ -435,7 +435,9 @@ def test_tool_registration() -> None:
                 "file_plan_report",     # the plan gate's report pen: the matrix is derived
                 # one pen for every whole-body phase report; the mounted scope picks the phase
                 "file_phase_report",
-                "read_research_proposals", "read_decisions"}
+                "read_research_proposals", "read_decisions",
+                # review reads the item's own diff from the record, never from an ambient shell
+                "read_item_diff"}
 
        and all(t in {x.name for x in DEV_TOOLS} for t in names))
 

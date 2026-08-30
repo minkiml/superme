@@ -210,6 +210,13 @@ def vet_lens_shape() -> None:
     ok("bullets naming no lens at all are refused",
        bool(lens_slot_issues("- Read the diff against the sibling commands.")))
     ok("an empty slot is not an error", not lens_slot_issues(""))
+    # A lens the author already emphasised is still a lens opener. Refusing it would reject
+    # correct input, and the surface has always accepted a pre-bolded name.
+    for already in ("- **Safety:** already bold", "- *Robustness:* italic",
+                    "- **Safety**: outside the colon"):
+        ok(f"an emphasised lens is accepted: {already[:18]}", not lens_slot_issues(already))
+    ok("...and bolding one stays idempotent",
+       _bold_lenses("- **Safety:** already bold") == "- **Safety:** already bold")
 
     # The refusal has to land BEFORE the write, or a malformed report still reaches the owner.
     from superme_agent.core.artifacts.user_reports import write_vet_user_report

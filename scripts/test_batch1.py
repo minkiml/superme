@@ -176,8 +176,11 @@ def test_fe_surfaces() -> None:
        and "{!tight && (model || ctx != null) && (" in panels
        and "{!tight && (researchKindLabel(it.research_kind) || workKindLabel(it.kind)) && (" in panels)
     dash = _norm(src("web/frontend/src/features/dev/DevDashboard.tsx"))
+    # The INVARIANT, not the classes: the title always renders, the reason only when there is
+    # room, and the tooltip carries both either way. Styling moved and this went red on it.
     ok("the attention feed keeps WHICH item and drops the reason when there is no room",
-       "{!tight && <span className=\"ml-1.5 text-[10px] text-faint\">{r.reason}</span>}" in dash)
+       "{!tight && <span" in dash and "{r.reason}</span>}" in dash
+       and "{r.title}" in dash and "title={`${r.title} \u2014 ${r.reason}`}" in dash)
     ok("the inbox-to-workspace arrow turns with the layout instead of pointing at white space",
        "const down = w > 0 && w < 460" in dash and "<Connector label=\"push\" down={down} />" in dash)
     ok("the work-item stat row becomes five marks + five numbers on one line",
