@@ -112,11 +112,19 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                  "entry is your word for what you saw, not the kernel's.")
     if machine:
         lines = "\n".join(f"- `{m['check']}` — {'PASS' if m.get('passed') else 'FAIL'} "
-                          f"({str(m.get('result') or '').strip()[:200]})" for m in machine)
+                          f"({str(m.get('result') or '').strip()[:200]})"
+                          + ("  ⚠ PASSED ONCE ONLY: the identical command did not agree on a "
+                             "second run, so this check depends on state it does not control"
+                             if m.get("hermetic") is False else "")
+                          for m in machine)
         base += ("\n\nThe kernel already ran these checks in the sandbox and recorded each result "
                  "— they are DONE:\n" + lines + "\nDo not re-run or re-record them; a second entry "
                  "is refused. Read them as findings, perform the remaining checks yourself, and "
                  "cover all of them in your report.")
+        if any(m.get("hermetic") is False for m in machine):
+            base += ("\n\nA check marked PASSED ONCE ONLY is a defect in the CHECK, not evidence "
+                     "against the code — the code passed on a clean state. Report it as a finding "
+                     "about the plan's verification, and do not fail the item for it.")
     # Only DISAGREEMENTS are named: an audit that agreed is the expected case. Orientation, not
     # the record.
     if (bad := [a for a in (audit or []) if not a.get("agrees")]):
@@ -378,6 +386,34 @@ def _shell_is_in(shell_cwd, worktree) -> bool:
     return a == b or b in a.parents
 
 
+def _materials_on_disk(item_dir) -> str:
+    """The item's readable files, as the paths they actually have.
+
+    Measured: agents compose `work-items/<id>/plan.md` and miss, because the real path carries an
+    `artifacts/` segment — 23 times since 2026-08-01, twice in one run that had just listed the
+    folder. Naming them removes the composing. Every distinct name is kept: a truncated list
+    would hide the one file that was wanted."""
+    try:
+        names = {sub: sorted(f.name for f in (Path(item_dir) / sub).glob("*.md") if f.is_file())
+                 for sub in ("artifacts", "reports")}
+    except (OSError, ValueError, TypeError):
+        return ""   # the preamble rides EVERY turn; a bad path must never break one
+    out: list[str] = []
+    for sub, files in names.items():
+        series: dict[str, list[str]] = {}
+        for n in files:
+            stem = n[:-3]
+            head, _, tail = stem.rpartition("-")
+            series.setdefault(head if head and tail.isdigit() else stem, []).append(tail)
+        for stem, nums in series.items():
+            digits = sorted(n for n in nums if n.isdigit())
+            # A cycle series is one entry, not five: `build-vet-1..3.md` says the same thing.
+            label = (f"{stem}-{digits[0]}..{digits[-1]}.md" if len(digits) > 1
+                     else f"{stem}-{digits[0]}.md" if digits else f"{stem}.md")
+            out.append(f"`{sub}/{label}`")
+    return f" — holds {' · '.join(out)}" if out else " — nothing written yet"
+
+
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
                        compacted_checkpoint: str | None = None, shell_cwd=None,
                        anchor_dir=None) -> str:
@@ -399,7 +435,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         f"- work-item: **{item_id}** — \"{title}\"\n"
         f"- kind: `{kind}`\n"
         f"- phase: `{phase}`\n"
-        f"- materials: `{item_dir}/`"
+        f"- materials: `{item_dir}/`{_materials_on_disk(item_dir)}"
         + (f"\n- anchor docs: `{anchor_dir}/` — `Read` them there; they are outside the repo and "
            f"outside your item folder, and nothing you do to them is committed or merged"
            if anchor_dir else ""),

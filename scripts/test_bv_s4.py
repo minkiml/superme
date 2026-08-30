@@ -129,7 +129,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
 
     _lenses(d)
     r1 = A.write_vet_user_report(d, repo, summary="beta is still wrong",
-                                 confirms="- alpha holds", looked_at="- read the diff")
+                                 confirms="- alpha holds", looked_at="- Intent: read the diff against the brief.")
     text = Path(r1["path"]).read_text(encoding="utf-8")
     ok("the verdict is derived from the fence, never asserted by vet",
        r1["verdict"] == "failed" and r1["failed"] == ["beta-check"])
@@ -138,7 +138,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
        and "module.py:8" in text, text[:400])
     ok("…while vet's own narrative is carried verbatim",
        "beta is still wrong" in text and "- alpha holds" in text
-       and "- read the diff" in text)
+       and "read the diff against the brief" in text)
     ok("the passing check is NOT re-listed — the Task tab carries the per-check evidence",
        "alpha-check" not in text)
 

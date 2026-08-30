@@ -142,6 +142,102 @@ def test_exit_code_decides_and_the_kernel_records():
     ok("the unrunnable check is untouched — it is the agent's", "looks-right" not in entries)
 
 
+
+# ── hermeticity: a check that only passes once ──────────────────────────────────────────────────
+
+NON_HERMETIC_PLAN = """# Plan — hermeticity probe
+
+## Verification plan
+depth: checks
+reason: probing the executor
+env: none
+
+### hermetic-check
+- traces: PRD deliverable d-1
+- covers: t1
+- mode: command
+- scenario: the same answer every time
+- run: test -f built.txt
+- expect: passes as often as you run it
+
+### leaves-state-behind
+- traces: PRD deliverable d-1
+- covers: t1
+- mode: command
+- scenario: passes once, then poisons the state it depends on
+- run: test ! -f ledger.tmp && touch ledger.tmp
+- expect: the ledger is empty before counting
+
+### already-failing
+- traces: PRD deliverable d-1
+- covers: t1
+- mode: command
+- scenario: fails on the first run
+- run: exit 3
+- expect: irrelevant — it never passes
+"""
+
+
+def _hermeticity_item() -> tuple[Path, Path]:
+    root = Path(tempfile.mkdtemp(prefix="kherm-"))
+    item, wt = root / "item", root / "wt"
+    (item / "artifacts").mkdir(parents=True)
+    wt.mkdir()
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(NON_HERMETIC_PLAN,
+                                                                  encoding="utf-8")
+    _arts.scaffold_cycle(item, title="probe")
+    return item, wt
+
+
+def test_a_check_that_only_passes_once_is_reported():
+    """A passing check is run again; one that then fails depends on state it does not control.
+
+    Live 2026-08-30, item 7d6ce49cad80: build ran a check on a clean ledger and it passed, vet ran
+    the same check and it failed on the ledger build's own run had dirtied. Three cycles and a
+    review send-back followed, and build's final answer was `clean_noop` — the code was never
+    wrong. Worse, an earlier cycle CHANGED the product to satisfy a different broken check."""
+    if not SANDBOXED:
+        print("  ..  skipped (no sandbox on this host)")
+        return
+    item, wt = _hermeticity_item()
+    (wt / "built.txt").write_text("built\n", encoding="utf-8")
+    rows = _checks.execute(item, wt, title="probe")
+    by = {r["check"]: r for r in rows}
+
+    ok("a check giving the same answer twice is not flagged",
+       by["hermetic-check"]["passed"] is True and not by["hermetic-check"].get("hermetic") is False)
+    ok("...and its verdict is unchanged", by["hermetic-check"]["code"] == 0)
+
+    ok("a check that passes then fails on a re-run is FLAGGED",
+       by["leaves-state-behind"].get("hermetic") is False)
+    ok("...but its verdict still stands — the code passed on a clean state",
+       by["leaves-state-behind"]["passed"] is True)
+
+    ok("a check that failed the first time is not re-run",
+       by["already-failing"].get("hermetic") is None)
+    ok("...and still fails", by["already-failing"]["passed"] is False)
+
+    # The signal has to reach VET, or flagging it changes nothing.
+    entries = {e["check"]: e for e in _arts.evidence_entries(item)}
+    note = entries["leaves-state-behind"].get("note", "")
+    ok("the ledger entry carries the finding", "same command" in note or "again" in note)
+    ok("...and says the check, not the code, is what to look at",
+       "check" in note.lower())
+    ok("a hermetic check's entry is not cluttered with it",
+       "again" not in entries["hermetic-check"].get("note", ""))
+
+    # And the TRIGGER has to render it, or vet reads a clean PASS and never learns.
+    from superme_agent.core import kernel_speech
+    trig = kernel_speech.vet_trigger("x", "probe", machine=rows, kernel=True)
+    ok("the vet trigger marks the flagged check", "PASSED ONCE ONLY" in trig)
+    ok("...and tells vet it is a defect in the CHECK, not the code",
+       "defect in the CHECK" in trig)
+    ok("...and says not to fail the item for it", "do not fail the item" in trig)
+    clean = kernel_speech.vet_trigger("x", "probe", kernel=True,
+                                      machine=[r for r in rows if r["check"] == "hermetic-check"])
+    ok("a run with no flagged check says nothing about it", "PASSED ONCE ONLY" not in clean)
+
+
 def test_a_machine_entry_is_final():
     if not SANDBOXED:
         print("  ..  skipped (no sandbox on this host)")
@@ -203,6 +299,7 @@ def main() -> None:
     test_only_runnable_undeferred_checks_are_ours()
     test_kernel_sandbox_holds()
     test_exit_code_decides_and_the_kernel_records()
+    test_a_check_that_only_passes_once_is_reported()
     test_a_machine_entry_is_final()
     test_the_vetter_is_told_what_is_already_done()
     test_the_loop_runs_them_before_the_session()

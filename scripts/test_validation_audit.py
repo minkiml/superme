@@ -281,10 +281,14 @@ def test_the_report_carries_it_whatever_vet_writes() -> None:
                               result="exit 1 · 2 failed")
     text = Path(A.write_vet_user_report(
         d, None, summary="Everything holds.", confirms="- it all works",
-        looked_at="- read the diff")["path"]).read_text(encoding="utf-8")
+        looked_at="- Intent: read the diff against the brief.")["path"]).read_text(encoding="utf-8")
     ok("vet's all-clear does not suppress it", "## What didn't hold" in text)
-    ok("…and the line says whose claim it was and what re-running got",
-       "The build reported `pytest -q` as passing" in text and "does not" in text)
+    # The INVARIANT, not the sentence: the report says a build claim did not reproduce, and how
+    # many. The wording moved when the command name was deliberately dropped from the owner's
+    # line, and this assertion went red on a copy edit — which a suite must never do.
+    ok("…and it says a build claim did not reproduce, and how many",
+       "did not hold up when re-run" in text and "1 of its checks" in text)
+    ok("…without pasting the command at the owner", "pytest -q" not in text)
 
 
 def main() -> None:

@@ -6,6 +6,7 @@ session opens, and writes the verdict to the ledger. A check without one is agen
 
 import logging
 import subprocess
+import time
 from pathlib import Path
 
 from ...core import artifacts as _arts
@@ -19,6 +20,13 @@ CHECK_TIMEOUT_S = 600
 
 # The raw result is the point of a machine entry, but a 10 MB log in a fence helps nobody.
 _TAIL = 1200
+
+# A PASSING check is run once more to see whether it says the same thing twice. Only the quick
+# ones: a long suite is not the shape that leaks state between runs, and doubling it costs real
+# wall-clock for a signal it rarely carries.
+_RERUN_UNDER_S = 60.0
+_NOT_HERMETIC = ("the same command run twice in a row did not agree ({first} then {second}) — the "
+                 "CHECK depends on state it does not control, so look at the check before the code")
 
 
 def _run(cmd: str, worktree: Path) -> tuple[int, str] | None:
@@ -36,6 +44,17 @@ def _run(cmd: str, worktree: Path) -> tuple[int, str] | None:
     except OSError as e:                      # the command could not be launched at all
         code, out = 127, str(e)
     return code, out[-_TAIL:].strip()
+
+
+def _agrees_on_a_second_run(cmd: str, worktree: Path, first_code: int) -> int | None:
+    """Re-run a check that just PASSED. The exit code it gives the second time, or None if it was
+    not re-run at all.
+
+    Only the exit code is compared: output carries timestamps, paths and orderings that differ
+    between two correct runs, and a false alarm here would send an item into the loop this exists
+    to prevent."""
+    got = _run(cmd, worktree)
+    return None if got is None else got[0]
 
 
 def dry_run(item_dir: Path, repo_dir: Path) -> list[dict]:
@@ -109,6 +128,7 @@ def execute(item_dir: Path, worktree: Path, *, skip: list[str] | None = None,
         if argv is None:
             log.warning("kernel checks unavailable on this host — %s stays agent-attested", cid)
             return []          # all-or-nothing: a half-executed exam is the worst of both
+        started = time.monotonic()
         try:
             p = subprocess.run(argv, cwd=str(worktree), capture_output=True, text=True,
                                timeout=CHECK_TIMEOUT_S, encoding="utf-8")
@@ -117,16 +137,30 @@ def execute(item_dir: Path, worktree: Path, *, skip: list[str] | None = None,
             code, out = 124, f"timed out after {CHECK_TIMEOUT_S}s"
         except OSError as e:                      # the command could not be launched at all
             code, out = 127, str(e)
+        elapsed = time.monotonic() - started
         tail = out[-_TAIL:].strip()
         passed = code == 0
         result = f"exit {code}" + (f" · {tail}" if tail else "")
+        # A check that already failed tells us nothing new on a second run, and the verdict is
+        # settled either way — this asks only whether a PASS is repeatable.
+        second = (_agrees_on_a_second_run(cmd, worktree, code)
+                  if passed and elapsed < _RERUN_UNDER_S else None)
+        hermetic = None if second is None else second == code
+        note = "" if passed else f"expected exit 0, got {code}"
+        if hermetic is False:
+            # The verdict STANDS: it passed on a clean state, and failing it here would cause the
+            # loop this detects. What changes is that vet is told where to look.
+            note = _NOT_HERMETIC.format(first=f"exit {code}", second=f"exit {second}")
+            log.info("check %s is not hermetic: exit %s then %s", cid, code, second)
         try:
             _arts.record_verification(
                 Path(item_dir), worktree, check=cid, how=cmd, result=result, passed=passed,
-                note="" if passed else f"expected exit 0, got {code}",
-                title=title, by=_arts.BY_MACHINE)
+                note=note, title=title, by=_arts.BY_MACHINE)
         except ValueError:
             # The ledger refused it — the run happened, and vet still sees the row below.
             log.exception("kernel check %s ran but could not be recorded", cid)
-        rows.append({"check": cid, "passed": passed, "code": code, "result": result})
+        row = {"check": cid, "passed": passed, "code": code, "result": result}
+        if hermetic is not None:
+            row["hermetic"] = hermetic
+        rows.append(row)
     return rows
