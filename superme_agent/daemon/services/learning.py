@@ -27,7 +27,7 @@ log = logging.getLogger("superme-agent")
 FORGE_KIT = DEV_PLUGIN_DIR / "scripts" / "forge_kit"   # the forge agent's lint + eval toolkit
 
 
-# --- DISTILL phase: process the candidate pool into proposals -----------------------------------
+# --- distill phase: process the candidate pool into proposals -----------------------------------
 
 async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
     """One background distill pass over the un-processed candidate pool."""
@@ -57,7 +57,7 @@ async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
         if isinstance(ev, Usage):
             _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
         elif isinstance(ev, Result):
-            session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
+            session_id = ev.session_id  # captured only to dispose the throwaway transcript
             run_model = ev.model          # the model the SDK resolved for this background run
             run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
         elif isinstance(ev, Init):
@@ -82,7 +82,7 @@ async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
     log.info("background distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
 
 
-# --- WRITE phase: gate-1 approval → background per-item authoring ---
+# --- write phase: gate-1 approval → background per-item authoring ---
 
 # Forms and scopes that can actually be written today; core is reserved.
 WRITE_FORMS = {"constitution", "skill", "agent"}
@@ -171,7 +171,7 @@ async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: i
         # stays DB-only.
         approve=learning_write_approve(workspace),
         extra_mcp_servers=turn_mcp,
-        enforce_silent=False,   # the ONE run entitled to the forge-* skills
+        enforce_silent=False,  # the one run entitled to the forge-* skills
 
     ):
         if isinstance(ev, Usage):
@@ -206,7 +206,7 @@ async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: i
     shutil.rmtree(workspace, ignore_errors=True)
 
 
-# Deterministic code decides WHEN and WHAT-IS-NEW; the `capture` sub-agent decides what in that
+# Deterministic code decides when and what-is-new; the `capture` sub-agent decides what in that
 # slice is a learning.
 
 # Keyed by origin session id, in memory: a restart means nothing is sweeping, so an empty set is
@@ -234,7 +234,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     # choke: every trigger lands here.
     if _spine.session_is_onboarding(session_id):
         return {"status": "skipped_onboarding", "session_id": session_id}
-    # Diagnosis is read-only observation ABOUT a run; mining it would feed diagnosis-of-diagnosis
+    # Diagnosis is read-only observation about a run; mining it would feed diagnosis-of-diagnosis
     # recursion.
     if _spine.session_is_diagnosis(session_id):
         return {"status": "skipped_diagnosis", "session_id": session_id}
@@ -279,7 +279,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
         if isinstance(ev, Usage):
             _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
         elif isinstance(ev, Result):
-            sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
+            sub_session = ev.session_id  # captured only to dispose the throwaway transcript
             run_model = ev.model          # the model the SDK resolved for this background run
             run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
         elif isinstance(ev, Init):
@@ -293,7 +293,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
     if sub_session:
         _sessions.discard_transcript(ctx, sub_session)
-    # Advance the watermark ONLY on a clean pass — an aborted sweep must re-sweep the same slice.
+    # Advance the watermark only on a clean pass — an aborted sweep must re-sweep the same slice.
     if run_status == "done":
         _spine.set_sweep_watermark(session_id, head)
     cands_after = len(_dev_store.list_memory_candidates(context_id, status="candidate"))
@@ -372,7 +372,7 @@ async def sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: in
             watermark = _spine.get_sweep_watermark(sid)
             if watermark >= len(msgs):
                 continue  # nothing new since the last sweep
-            # Count NEW user turns past the watermark — sweep only once enough has accumulated.
+            # Count new user turns past the watermark — sweep only once enough has accumulated.
             new_user = sum(1 for m in msgs[watermark:] if m.get("role") == "you")
             if new_user < min_user_msgs:
                 continue

@@ -15,7 +15,7 @@ def _item_dir(dev_root, item_id: str):
 
 
 def _bound_err(item_id, bound_item_id) -> str | None:
-    """A work-item session operates ONLY its own item.
+    """A work-item session operates only its own item.
 
     Returns the refusal text, or None when the call is in scope."""
     if bound_item_id is None:
@@ -124,7 +124,7 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             return _err("Kind/deliverable are fixed after the triage-exit gate — this item is "
                         f"already in `{item.get('phase')}`. A post-triage need is a branch-off "
                         "(create_inbox_item), never a re-kind.")
-        # A kind contradicting the FILED one is triage overruling somebody, so the run stops and
+        # A kind contradicting the filed one is triage overruling somebody, so the run stops and
         # asks instead.
         proposed = str(item.get("proposed_kind") or "")
         override = _s(args, "kind_override_reason")
@@ -197,7 +197,7 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             except ValueError as e:
                 return _err(str(e))
             fam_note = f" · research kind `{fam}`"
-        # Recording a classification IS triage having run; a bare inbox push never stamps it.
+        # Recording a classification is triage having run; a bare inbox push never stamps it.
         dev.set_work_item_triaged(root, item_id)
         t_note = f" · renamed to \"{title}\"" if renamed else ""
         return _ok(f"Recorded triage classification: kind `{kind}` · scale "

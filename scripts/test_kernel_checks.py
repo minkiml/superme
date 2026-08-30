@@ -190,12 +190,7 @@ def _hermeticity_item() -> tuple[Path, Path]:
 
 
 def test_a_check_that_only_passes_once_is_reported():
-    """A passing check is run again; one that then fails depends on state it does not control.
-
-    Live 2026-08-30, item 7d6ce49cad80: build ran a check on a clean ledger and it passed, vet ran
-    the same check and it failed on the ledger build's own run had dirtied. Three cycles and a
-    review send-back followed, and build's final answer was `clean_noop` — the code was never
-    wrong. Worse, an earlier cycle CHANGED the product to satisfy a different broken check."""
+    """A passing check is run again, and one that then fails depends on state it cannot control."""
     if not SANDBOXED:
         print("  ..  skipped (no sandbox on this host)")
         return
@@ -217,7 +212,7 @@ def test_a_check_that_only_passes_once_is_reported():
        by["already-failing"].get("hermetic") is None)
     ok("...and still fails", by["already-failing"]["passed"] is False)
 
-    # The signal has to reach VET, or flagging it changes nothing.
+    # The signal has to reach vet, or flagging it changes nothing.
     entries = {e["check"]: e for e in _arts.evidence_entries(item)}
     note = entries["leaves-state-behind"].get("note", "")
     ok("the ledger entry carries the finding", "same command" in note or "again" in note)
@@ -226,7 +221,7 @@ def test_a_check_that_only_passes_once_is_reported():
     ok("a hermetic check's entry is not cluttered with it",
        "again" not in entries["hermetic-check"].get("note", ""))
 
-    # And the TRIGGER has to render it, or vet reads a clean PASS and never learns.
+    # And the trigger has to render it, or vet reads a clean pass and never learns.
     from superme_agent.core import kernel_speech
     trig = kernel_speech.vet_trigger("x", "probe", machine=rows, kernel=True)
     ok("the vet trigger marks the flagged check", "PASSED ONCE ONLY" in trig)

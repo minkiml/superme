@@ -103,7 +103,7 @@ def runnable_checks(item_dir: Path, *, skip: list[str] | None = None) -> list[di
     if not plan.is_file():
         return []
     blocked = set(skip or ())
-    # A check carrying a RUBRIC is never ours: its verdict includes a judgment, and a machine
+    # A check carrying a rubric is never ours: its verdict includes a judgment, and a machine
     # entry is final.
     return [c for c in _arts.parse_vet_plan(plan.read_text(encoding="utf-8")).get("checks", [])
             if c.get("run") and c.get("id") and c["id"] not in blocked and not c.get("rubric")]

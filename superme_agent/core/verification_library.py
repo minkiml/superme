@@ -1,4 +1,4 @@
-"""The per-repo VERIFICATION LIBRARY — proven checks every later item inherits.
+"""The per-repo verification library — proven checks every later item inherits.
 
 **standing** attaches to every plan here; **available** is a catalogue a plan cites by id.
 Available is the default, and only the owner promotes. Close writes; vet only nominates.

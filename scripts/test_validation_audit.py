@@ -1,9 +1,4 @@
-"""Validation is build's, and its PROOF is vet's.
-
-Written as prose, "106/106 pass" reads identically whether the suite passed, failed or never
-ran, and build is both runner and only witness. So build records data, and vet re-runs it.
-
-Run: PYTHONPATH=. python scripts/test_validation_audit.py
+"""Validation is build's, and its proof is vet's.
 """
 
 import shutil
@@ -54,8 +49,9 @@ def test_a_run_is_recorded_as_data() -> None:
 
 
 def test_the_command_is_the_identity() -> None:
-    """Vet re-executes the recorded string verbatim. A record with no command is the prose this
-    replaces, and a paraphrased one is worse — it looks checkable and isn't."""
+    """Vet re-executes the recorded string verbatim.
+
+    A record with no command cannot be re-run."""
     print("the command IS the record")
     d = item()
     try:
@@ -69,9 +65,7 @@ def test_the_command_is_the_identity() -> None:
 
 
 def test_the_machine_lane_and_the_prose_coexist() -> None:
-    """`## Validation` carries BOTH build's per-task narrative and the machine lane beside it.
-
-    Read line-wise, the fence would spill raw ledger fields onto a human surface."""
+    """Validation carries both build's narrative and the machine rows."""
     print("machine lane beside prose — each read by its own reader")
     d = item()
     A.record_validation(d, None, command="pytest -q", result="12 passed", passed=True)
@@ -87,8 +81,9 @@ def test_the_machine_lane_and_the_prose_coexist() -> None:
 
 
 def test_an_entry_stands_apart_from_the_one_before_it() -> None:
-    """A blank line between entries. Packed back to back, a fence of six records
-    is one wall of text; the parser never sees the gap, so this is free."""
+    """A blank line between entries.
+
+    Packed back to back they read as one."""
     print("the machine lanes are readable")
     d = item()
     for n in range(3):
@@ -102,13 +97,13 @@ def test_an_entry_stands_apart_from_the_one_before_it() -> None:
        all(fence[i - 1].strip() == "" for i in heads[1:]), str(fence))
     ok("…and none of them is preceded by two", all(fence[i - 2].strip() for i in heads[1:] if i > 1))
     ok("…while the reader still counts every one", len(A.validation_runs(d)) == 3)
-    # The FIRST entry must not be pushed off the fence's opening line — an empty block gets no gap.
+    # The first entry must not be pushed off the fence's opening line — an empty block gets no
+    # gap.
     ok("a fence opens straight onto its first entry", heads and heads[0] == 0)
 
 
 def test_the_two_lanes_never_read_each_other() -> None:
-    """`## Verification` (vet's ```checks) and `## Validation` (build's ```runs) share a grammar
-    and a file. Tagging the fence is what keeps one phase's record out of the other's count."""
+    """Vet's checks and build's validation are separate lanes."""
     print("two machine lanes, one file, no crossing")
     d = item()
     A.record_validation(d, None, command="pytest -q", result="12 passed", passed=True)
@@ -121,7 +116,7 @@ def test_the_two_lanes_never_read_each_other() -> None:
 def test_the_suite_is_refused_as_a_check() -> None:
     """The suite is build's validation.
 
-    As a vet-plan check it runs twice and files a validation result as the item's own proof."""
+    As a vet-plan check it runs the wrong lane."""
     print("the vet plan refuses the project's own test suite")
     for cmd in ("python3 -m unittest discover -s tests", "pytest -q", "npm test",
                 "go test ./...", "cargo test", "pytest -q && echo done"):
@@ -148,7 +143,7 @@ def test_the_suite_is_refused_as_a_check() -> None:
            "# Plan\n\n## Verification plan\ndepth: checks\nreason: r\nenv: none\n\n"
            "### c1\n- proves: the output reads correctly to a human.\n- traces: t\n"
            "- mode: inspection\n- scenario: s\n- expect: it matches the sample above\n")))
-    # …and it can no longer ENTER the library either, whichever way someone tries.
+    # …and it can no longer enter the library either, whichever way someone tries.
     from superme_agent.core import verification_library as VL
     bad = VL.entry_issues("### full-suite-green\n- proves: nothing that worked before broke.\n"
                           "- traces: t\n- mode: command\n- scenario: run the suite\n"
@@ -159,10 +154,7 @@ def test_the_suite_is_refused_as_a_check() -> None:
 
 
 def test_an_inherited_check_is_not_the_planner_s_prose() -> None:
-    """The sharpness lint asks the planner to sharpen wording.
-
-    An inherited entry's wording was settled when the repo adopted it, so flagging it prints a
-    row nobody can act on."""
+    """The sharpness lint asks the planner to sharpen what it wrote, not what it inherited."""
     print("the sharpness lint leaves inherited checks alone")
     body = ("# Plan\n\n## Verification plan\ndepth: checks\nreason: r\nenv: none\n\n"
             "### c1\n- proves: it works.\n- traces: t\n- mode: command\n- scenario: s\n"
@@ -227,9 +219,7 @@ def test_the_audit_compares_claim_to_machine() -> None:
 
 
 def test_an_audit_is_never_one_of_the_item_s_checks() -> None:
-    """Unit tests are not the item's exam, which is why the suite leaves the vet plan.
-
-    An audit entry leaking into the evidence ledger would put it straight back."""
+    """Unit tests are not the item's exam."""
     print("an audit is not a check")
     d = item()
     A.record_verification(d, None, check="c1", how="ran", result="exit 0", passed=True)
@@ -241,9 +231,7 @@ def test_an_audit_is_never_one_of_the_item_s_checks() -> None:
 
 
 def test_a_broken_claim_routes_back_to_build() -> None:
-    """Build and vet are autonomous, so a false green is handled INSIDE the loop.
-
-    It goes back to build like any other failure, never as a human decision."""
+    """Build and vet are autonomous, so a false green is handled without the owner."""
     print("routing — a false green is the loop's business, not the owner's")
     from superme_agent.daemon.services.loop import decide_after_vet
     live = {"id": "i1", "status": "active", "phase": "vet"}
@@ -264,9 +252,7 @@ def test_a_broken_claim_routes_back_to_build() -> None:
 
 
 def test_the_report_carries_it_whatever_vet_writes() -> None:
-    """`## What didn't hold` is machine-authored off the record.
-
-    A finding about the build is what vet has least reason to volunteer."""
+    """The failures section is machine-authored off the record."""
     print("the vet report cannot write around it")
     d = item()
     plan = d / "artifacts" / "plan.md"
@@ -283,9 +269,7 @@ def test_the_report_carries_it_whatever_vet_writes() -> None:
         d, None, summary="Everything holds.", confirms="- it all works",
         looked_at="- Intent: read the diff against the brief.")["path"]).read_text(encoding="utf-8")
     ok("vet's all-clear does not suppress it", "## What didn't hold" in text)
-    # The INVARIANT, not the sentence: the report says a build claim did not reproduce, and how
-    # many. The wording moved when the command name was deliberately dropped from the owner's
-    # line, and this assertion went red on a copy edit — which a suite must never do.
+    # The invariant, not the sentence. The wording moved and this went red on a copy edit.
     ok("…and it says a build claim did not reproduce, and how many",
        "did not hold up when re-run" in text and "1 of its checks" in text)
     ok("…without pasting the command at the owner", "pytest -q" not in text)

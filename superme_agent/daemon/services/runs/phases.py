@@ -161,7 +161,7 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
                                  item_id=item_id, actor=by,
                                  meta={"from": phase, "to": run_phase, "feedback": feedback[:400],
                                        "by": by})
-        # Resume the TARGET phase's own thread — resuming the entering phase's re-plans in the
+        # Resume the target phase's own thread — resuming the entering phase's re-plans in the
         # reviewer's head.
         slots = item.get("sessions") or {}
         session_id = (slots.get(kind_profiles.session_slot(run_phase))
@@ -225,7 +225,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
                          notify=retry_notice(context_id, item_id, phase))
     async for ev in turn.stream(
         _agent, ctx, prompt,
-        resume=session_id,   # RESUME — the deputy's turn lands in the item's own transcript
+        resume=session_id,  # Resume — the deputy's turn lands in the item's own transcript
         model=model,
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(item_dir, deny_all),

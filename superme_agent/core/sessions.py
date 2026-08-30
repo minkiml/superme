@@ -22,7 +22,7 @@ _ROLE = {"user": "you", "assistant": "superme"}
 
 
 def _turn_count(messages: list[dict]) -> int:
-    """How many MESSAGES, counted the way the owner reads them: consecutive records
+    """How many messages, counted the way the owner reads them: consecutive records
     from one speaker are one message."""
     turns = 0
     prev: str | None = None
@@ -40,7 +40,7 @@ _NOISE_PREFIXES = (
     "<command-args>",
     "<local-command-stdout>",
     "<local-command-caveat>",
-    # ONE PER INTAKE SKILL. Miss one and the kernel's order to itself opens as the OWNER's first
+    # One per intake skill. Miss one and the kernel's order to itself opens as the owner's first
     # message.
     "Run superme-dev:plan for work-item",
     "Run superme-dev:triage for work-item",
@@ -94,7 +94,7 @@ def short_item_id(item_id: str | None) -> str:
 
 
 def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> str:
-    """The DEFAULT title when the owner set no override. The router upgrades a
+    """The default title when the owner set no override. The router upgrades a
     work-item one to the item's title."""
     if kind in ("intake", "build", "vet"):  # role-stamped item sessions
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)} · {kind}"
@@ -169,7 +169,7 @@ class SessionStore:
         return len(targets)
 
     def discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool:
-        """Delete a transcript from disk WITHOUT touching the index — for disposable
+        """Delete a transcript from disk without touching the index — for disposable
         runs never recorded as sessions."""
         if not session_id:
             return False
@@ -184,7 +184,7 @@ class SessionStore:
 
     # --- transcript access ------------------------------------------------------
     def _transcript(self, ctx: Context, session_id: str, cwd=None):
-        """The transcript path, keyed by the SESSION'S recorded cwd when the spine knows it,
+        """The transcript path, keyed by the session'S recorded cwd when the spine knows it,
         else the caller's."""
         if cwd is None:
             cwd = (self._spine.get_session(session_id) or {}).get("cwd")
@@ -252,7 +252,7 @@ class SessionStore:
         return scan["messages"] if scan else []
 
     def _workspace_rows(self, ctx: Context) -> list[dict]:
-        """This workspace's resumable rows, scoped by REPO not cwd: a phase run swaps
+        """This workspace's resumable rows, scoped by repo not cwd: a phase run swaps
         cwd to the worktree."""
         return self._spine.sessions_for_repo(ctx.id, resumable_only=True)
 
@@ -286,14 +286,14 @@ class SessionStore:
                 "message_count": scan["message_count"],
                 # Non-null ⇒ a work-item session. The router resolves its title.
                 "item_id": item_id,
-                # The durable kind; NULL reads as general. Labels the picker's category.
+                # The durable kind; null reads as general. Labels the picker's category.
                 "kind": rec.get("kind") or None,
             })
         out.sort(key=lambda s: s["updated_at"], reverse=True)
         return out
 
     def rename(self, ctx: Context, session_id: str, title: str | None) -> bool:
-        """Set or clear a session's owner TITLE override. A blank title reverts to the
+        """Set or clear a session's owner title override. A blank title reverts to the
         transcript-derived one."""
         if session_id not in {r["id"] for r in self._workspace_rows(ctx)}:
             return False

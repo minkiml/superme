@@ -1,9 +1,4 @@
-"""A kernel-fired run is ONE turn, and a phase may not end owing its own gate.
-
-Two failures found in the 2026-08-28 live E2E. Both cost a run that produced nothing: a subagent
-backgrounded into a turn that never came, and a plan that stopped holding the fix its gate wanted.
-
-Run: PYTHONPATH=. python scripts/test_single_turn.py
+"""A kernel-fired run is one turn, and a phase may not end owing its own gate.
 """
 
 import asyncio
@@ -41,9 +36,9 @@ async def _yes(_t, _a):
 
 
 def hook_says(tool: str, args: dict | None = None):
-    """What the PreToolUse hook decides. A HOOK and not `can_use_tool`, because the SDK does not
-    consult the permission callback for `Agent` or its own control tools — measured live, a
-    backgrounded spawn and a ScheduleWakeup both sailed past the callback version."""
+    """What the PreToolUse hook decides.
+
+    A hook and not `can_use_tool`, because the SDK never consults the callback for `Agent`."""
     out = asyncio.run(single_turn_hook()(
         {"tool_name": tool, "tool_input": args or {}}, None, None))
     return (out.get("hookSpecificOutput") or {}).get("permissionDecision"), \
@@ -53,8 +48,8 @@ def hook_says(tool: str, args: dict | None = None):
 def test_no_later_turn() -> None:
     print("a kernel-fired run has no turn after this one")
 
-    # Verbatim the shape that killed run 2330: Agent defaults to background, so its result
-    # lands in a turn that never comes.
+    # The shape that costs a run: Agent defaults to background, so its result lands in a turn that
+    # never comes.
     d, why = hook_says("Agent", {"prompt": "explore", "subagent_type": "Explore"})
     ok("a backgrounded subagent is denied", d == "deny")
     ok("...and the denial names the fix", "run_in_background: false" in why)
@@ -112,7 +107,7 @@ def test_exit_check() -> None:
         ok(f"`{outcome}` still gets out — it REPORTS the wall, it does not claim done",
            not r.get("is_error"))
 
-    # CONTROL: no exit_check (every phase but plan) behaves exactly as before.
+    # Control: no exit_check (every phase but plan) behaves exactly as before.
     h2 = _report_completion(completion_sink={})
     ok("control: a phase with no exit check is unaffected", not call(h2).get("is_error"))
     # A check that throws must not turn a finished run into a failure.

@@ -1,9 +1,4 @@
 """The two specialised reports: the plan's and the cycle's.
-
-The confirmation table is DERIVED, so a task nothing defends is named at the gate rather
-than three cycles later. The cycle report names provenance: executed and attested differ.
-
-Run: PYTHONPATH=. python -m scripts.test_reports
 """
 
 import re as _re
@@ -72,9 +67,7 @@ def _lenses(d: Path) -> None:
 # ── the plan report ─────────────────────────────────────────────────────────────────────────────
 
 def test_the_table_says_what_each_check_MEANS_not_what_it_runs():
-    """The row is the check's own `proves:` line, verbatim.
-
-    Deriving the meaning here would be a second account of the same exam, free to drift."""
+    """The row is the check's own `proves:` line."""
     item = _item()
     text = _report(item)
     ok("a row leads with what will be TRUE, in the owner's terms",
@@ -89,10 +82,9 @@ def test_the_table_says_what_each_check_MEANS_not_what_it_runs():
 
 
 def test_the_row_is_never_clipped_mid_meaning():
-    """The `proves:` line IS the row.
+    """The `proves:` line is the row.
 
-    Clipped to keep the column tidy, the first real item lost its meaning mid-word. A markdown
-    cell wraps; a truncated sentence does not recover."""
+    Clipping it to keep a column tidy loses the point."""
     long_proof = ("an expense recorded with an explicit date keeps that date, even when it is "
                   "entered weeks later and lands in a month that is already closed")
     text = _report(_item(PLAN.replace(
@@ -153,8 +145,7 @@ def test_nothing_factual_is_the_agent_s_to_assert():
 
 
 def test_a_research_item_gets_the_other_shape():
-    """No verification plan means no table to render, and every task would otherwise read as a
-    hole. What replaces the table is how the answer will be made trustworthy."""
+    """No verification plan means no table to render."""
     res = _item("# Plan\n\n## Tasks\n- [ ] t1 — time it at four sizes\n")
     text = Path(_arts.write_plan_user_report(
         res, summary="Measure where the time goes.", approach="- where the time goes",
@@ -200,9 +191,7 @@ REPORT_TEMPLATES = {
 
 
 def test_every_user_facing_report_opens_with_one_summary_line():
-    """The phase card renders the CURRENT phase's summary line and nothing else.
-
-    A report without one leaves the card blank, so the line is a contract, not a convention."""
+    """The phase card renders the current phase's summary line alone."""
     for phase, rel in REPORT_TEMPLATES.items():
         # Comments stripped first: an authoring note instructs the writer, never the document.
         body = _re.sub(r"<!--.*?-->", "", src(
@@ -215,10 +204,7 @@ def test_every_user_facing_report_opens_with_one_summary_line():
 
 
 def test_no_user_facing_report_carries_a_diff_section():
-    """User reports are CURRENT-STATE; the append-only history lives in the agent-facing docs.
-
-    A "changed since" section makes every reader reconstruct the present from a delta they did
-    not ask for."""
+    """User reports describe the current state, never the append-only history."""
     for phase, rel in REPORT_TEMPLATES.items():
         body = src("superme_agent/harness/plugins/superme-dev/skills/" + rel)
         ok(f"{phase}: no Changed-since section", "## Changed since" not in body)
@@ -234,8 +220,7 @@ def test_no_user_facing_report_carries_a_diff_section():
 
 
 def test_no_report_repeats_the_work_item_title():
-    """The drilldown header carries the title three inches above. A `# Plan — {title}` heading
-    spent the report's first line saying what the reader was already looking at."""
+    """The drilldown header already carries the title."""
     for phase, rel in REPORT_TEMPLATES.items():
         body = src("superme_agent/harness/plugins/superme-dev/skills/" + rel)
         head = next((ln for ln in body.splitlines() if ln.startswith("# ")), "")
@@ -305,9 +290,7 @@ def test_a_check_that_changed_across_cycles_reads_as_a_trail():
 
 
 def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
-    """Vet writes the narrative; code writes the red result off the ledger.
-
-    What code must guarantee is that the driver and the owner read the SAME outcome."""
+    """Vet writes the narrative, code writes the failures."""
     item = _item()
     _arts.scaffold_cycle(item, title="probe")
     _arts.record_verification(item, None, check="date-flag", how="ran it", result="exit 1",
@@ -360,7 +343,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
 
 
 def test_a_template_s_authoring_notes_never_become_the_document():
-    # A template comment instructs whoever AUTHORS from it; one shipped onto the PR page as the
+    # A template comment instructs whoever authors from it; one shipped onto the PR page as the
     # review.
     item = _item()
     r = _arts.scaffold_cycle(item)
@@ -396,7 +379,7 @@ def test_a_cycle_outcome_names_the_cycle_it_closed():
     # headings by hand.
     ok("the decision says which cycle it ended", "- cycle: 1" in text)
     ok("…and the meter still reads against the loop's ceiling", "tokens: 157844 / 500000" in text)
-    # The heading is PARSED: putting the cycle in it renamed every decision and the loop stopped
+    # The heading is parsed: putting the cycle in it renamed every decision and the loop stopped
     # recognising its own.
     ok("…without decorating the heading the loop's breakers parse",
        any(ln.startswith("### ") and ln.endswith("— review") for ln in text.splitlines()))
@@ -431,10 +414,7 @@ def _brief(text: str = BRIEF) -> Path:
 
 
 def test_the_owner_s_own_section_survives_the_round_trip():
-    """The only section of any report a PERSON writes.
-
-    The words come back at plan as authority, so a lost line is an instruction the owner believes
-    they gave."""
+    """The only section of any report a person writes."""
     item = _brief()
     ok("an untouched brief reads as empty rather than as missing",
        _arts.owner_input(item) == {"exists": True, "references": [], "notes": []})
@@ -462,7 +442,7 @@ def test_the_owner_s_own_section_survives_the_round_trip():
        text.count("**Useful imported references:**") == 1
        and text.count("**Verification notes:**") == 1)
 
-    # Removing one leaves the others alone: the delete path is a whole-list PUT, so a bug here
+    # Removing one leaves the others alone: the delete path is a whole-list put, so a bug here
     # rewrites untouched slots.
     kept = _arts.write_owner_input(item, references=refs[:1], notes=notes)
     ok("removing one slot leaves the rest untouched",
@@ -476,10 +456,7 @@ def test_the_owner_s_own_section_survives_the_round_trip():
 
 
 def test_a_slot_is_one_bullet_however_it_was_typed():
-    """One slot, one bullet, always.
-
-    Plan turns each note into a check, so a pasted newline splitting one note is a phantom exam
-    question."""
+    """One slot, one bullet, always."""
     item = _brief()
     back = _arts.write_owner_input(
         item,
@@ -497,9 +474,7 @@ def test_a_slot_is_one_bullet_however_it_was_typed():
 
 
 def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
-    """The read path decides what the owner and the deputy actually SEE.
-
-    A label whose content sat a blank line below it arrived as two orphan paragraphs."""
+    """The read path decides what the owner sees."""
     item = _brief()
     _arts.write_owner_input(
         item, references=[{"source": "docs/budget-rules.md", "description": "the ceiling rule"}],
@@ -519,9 +494,7 @@ def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
 
 
 def test_the_editor_never_authors_a_report_no_phase_wrote():
-    """Two absences that read the same and must not: an empty section, and no brief at all.
-
-    Creating one here would put a report on disk that triage never wrote."""
+    """Two absences that read the same and must not."""
     empty = Path(tempfile.mkdtemp(prefix="fromyou-")) / "item"
     (empty / "reports").mkdir(parents=True)
     ok("a missing brief reports itself instead of raising",
@@ -552,9 +525,7 @@ def test_the_editor_never_authors_a_report_no_phase_wrote():
 
 
 def test_the_drilldown_reads_the_owner_s_own_words_for_its_cards():
-    """The cards are BUILT FROM THE REPORTS, not from a second summary of the same facts.
-
-    That is what keeps a card and its document from disagreeing."""
+    """The cards are built from the reports, never from a second summary."""
     item = _brief("# Triage User-facing Brief\n\n"
                   "**Category:** Feature\n\n"
                   "**Background:** it came up while reconciling last month's receipts\n\n"
@@ -581,9 +552,7 @@ def test_the_drilldown_reads_the_owner_s_own_words_for_its_cards():
 
 
 def test_a_phase_card_never_shows_the_previous_pass():
-    """Reports are a phase's CLOSING act, several overwritten in place.
-
-    Rendered unconditionally, the card showed the last pass while the current one still worked."""
+    """Reports are a phase's closing act, and several overwrite in place."""
     from superme_agent.daemon.services.drilldown import _live_summary
     item = Path(tempfile.mkdtemp(prefix="live-")) / "item"
     (item / "reports").mkdir(parents=True)
@@ -596,7 +565,7 @@ def test_a_phase_card_never_shows_the_previous_pass():
     ok("…and one written BEFORE it describes an earlier pass, so it is not shown",
        _live_summary(item, "build", entered_after) == "")
     ok("a phase that has written nothing shows nothing", _live_summary(item, "vet", []) == "")
-    # Newest-first is the feed's contract; the wrong end compares against the item's FIRST
+    # Newest-first is the feed's contract; the wrong end compares against the item's first
     # transition.
     mixed = [{"kind": "run.report", "created_at": "2099-06-06T00:00:00+00:00"},
              {"kind": "phase.advance", "created_at": "2099-01-01T00:00:00+00:00"},
@@ -614,9 +583,7 @@ def test_a_phase_card_never_shows_the_previous_pass():
 
 
 def test_every_report_can_reach_the_record_behind_it():
-    """Each user-facing report is the compact read; `contract` is the path to the whole thing.
-
-    Review offered a judgment with its evidence unreachable."""
+    """Each user-facing report is the compact read, with the record behind it."""
     item = Path(tempfile.mkdtemp(prefix="contract-")) / "item"
     (item / "reports").mkdir(parents=True)
     (item / "artifacts").mkdir(parents=True)
@@ -631,7 +598,7 @@ def test_every_report_can_reach_the_record_behind_it():
        _arts.report_text(item, "review")["contract"] == "artifacts/review.md")
     ok("…and triage still reaches the brief", _arts.report_text(item, "triage")["contract"]
        == "artifacts/brief.md")
-    # Close is the deliberate None: its report IS the record, so a link would point at itself.
+    # Close is the deliberate None: its report is the record, so a link would point at itself.
     (item / "reports" / "report-close.md").write_text("# close\n\n**Summary:** x\n", encoding="utf-8")
     ok("close links to nothing, because its report is the record",
        _arts.report_text(item, "close")["contract"] is None)
@@ -642,7 +609,7 @@ def test_the_section_is_the_owner_s_alone():
                "report-triage-template.md")
     # Comments stripped first: naming the thing a note forbids is documentation, not the thing.
     section = _re.sub(r"<!--.*?-->", "", tmpl, flags=_re.DOTALL).split("## From you", 1)[1]
-    # A fill slot instructs the agent to WRITE something; under this heading that invents the
+    # A fill slot instructs the agent to write something; under this heading that invents the
     # owner's references.
     ok("the triage template offers no slot to fill under the owner's heading",
        "<fill:" not in section)

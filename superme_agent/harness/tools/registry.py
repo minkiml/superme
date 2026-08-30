@@ -69,7 +69,7 @@ def _render_schema(schema: type | dict[str, Any]) -> dict[str, Any]:
     hints = get_type_hints(schema, include_extras=True)
     out: dict[str, Any] = {"type": "object",
                            "properties": {k: _type_schema(t) for k, t in hints.items()}}
-    # Requiredness from the RESOLVED hints: under `from __future__ import annotations`,
+    # Requiredness from the resolved hints: under `from __future__ import annotations`,
     # `Required[...]` never reaches `__required_keys__`.
     declared = getattr(schema, "__required_keys__", frozenset())
     required = set()

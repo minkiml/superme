@@ -13,15 +13,15 @@ VET_CHECK_ID = re.compile(r"^[a-z0-9-]+$")
 _VET_HEADER_KEY = re.compile(r"^(depth|reason|env):\s*(.*)$")
 _VET_FIELD = re.compile(
     r"^-\s*(proves|traces|covers|mode|scenario|run|rubric|expect|source):\s*(.*)$")
-# A rubric criterion: an INDENTED bullet under `- rubric:`. Indentation separates fields, the
+# A rubric criterion: an indented bullet under `- rubric:`. Indentation separates fields, the
 # bullet separates criteria.
 _RUBRIC_ITEM = re.compile(r"^\s+[-*]\s+\S")
-# The literal command the KERNEL runs. One line, because a check is one exit code.
+# The literal command the kernel runs. One line, because a check is one exit code.
 _VET_CHECK_HEAD = re.compile(r"^###\s+(.+?)\s*$")
-# Vagueness heuristic for `expect`. A banned-word list is too brittle to BLOCK on — hence soft.
+# Vagueness heuristic for `expect`. A banned-word list is too brittle to block on — hence soft.
 _VET_VAGUE = re.compile(r"\b(works|correctly|properly|as expected)\b", re.IGNORECASE)
 _VET_EXPECT_MIN = 40
-# `proves` is written FOR the owner: "exit code 0" tells nobody whether a green demonstrates the
+# `proves` is written for the owner: "exit code 0" tells nobody whether a green demonstrates the
 # intent.
 _PROVES_MACHINE = re.compile(
     r"\bexit(?:s|ed)?[- ]?(?:code|status)\b|\bexit\s+(?:0|1|zero|non-?zero)\b|\bstdout\b|"
@@ -46,7 +46,7 @@ def parse_check_blocks(body: str) -> list[dict]:
         h = _VET_CHECK_HEAD.match(line)
         if h:
             last = ""
-            # `covers` joins the Proof view; absent is not hard. `proves` is the one HUMAN field,
+            # `covers` joins the Proof view; absent is not hard. `proves` is the one human field,
             # and without it readers drift.
             cur = {"id": vet_value(h.group(1)), "proves": "", "traces": "", "covers": "",
                    "mode": "", "scenario": "", "run": "", "expect": "", "rubric": [], "source": ""}
@@ -56,7 +56,7 @@ def parse_check_blocks(body: str) -> list[dict]:
             continue
         m = _VET_FIELD.match(line.strip())
         if m:
-            # `rubric:` holds a LIST — indented bullets, each judged and recorded separately.
+            # `rubric:` holds a list — indented bullets, each judged and recorded separately.
             # Everything else is one value.
             cur[m.group(1)] = [] if m.group(1) == "rubric" else vet_value(m.group(2))
             last = m.group(1)
@@ -94,7 +94,7 @@ def parse_vet_plan(plan_text: str) -> dict:
     return out
 
 
-# An UNNARROWED suite runner is build's validation, not the item's exam. Only the bare form is
+# An unnarrowed suite runner is build's validation, not the item's exam. Only the bare form is
 # refused.
 _SUITE_RUNNERS = (
     r"pytest", r"py\.test", r"python3?\s+-m\s+pytest", r"python3?\s+-m\s+unittest(\s+discover)?",
@@ -102,7 +102,7 @@ _SUITE_RUNNERS = (
     r"go\s+test", r"cargo\s+test", r"bundle\s+exec\s+rspec", r"rspec", r"mvn\s+test",
     r"gradle\s+test", r"dotnet\s+test", r"make\s+test", r"tox",
 )
-# …and what NARROWS one to a single behaviour. Anything here and the invocation is a real check.
+# …and what narrows one to a single behaviour. Anything here and the invocation is a real check.
 _SUITE_NARROWERS = re.compile(
     r"(::|-k\b|--filter\b|-m\b|--run\b|--testNamePattern\b|-t\b|-e\b|--only\b|"
     r"[\w./-]+\.(py|js|ts|tsx|rb|go|java|cs)\b|[\w-]+\.[A-Za-z_]\w*)")
@@ -115,7 +115,7 @@ def is_whole_suite_run(cmd: str) -> bool:
     cmd = " ".join((cmd or "").split())
     if not cmd or not _SUITE_RUN.match(cmd):
         return False
-    # Only the runner's OWN arguments narrow it. `-q`/`--tb=short` are noise controls, not
+    # Only the runner's own arguments narrow it. `-q`/`--tb=short` are noise controls, not
     # selectors.
     head = re.split(r"&&|\|\||;|\|", cmd)[0]
     tail = head[_SUITE_RUN.match(head).end():] if _SUITE_RUN.match(head) else ""
@@ -165,7 +165,7 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
                              "passes, in the owner's terms and not the command's")
                 issues.append(f"vet plan check {label!r}: missing `{field_name}`{extra}")
         # As a vet-plan check it runs the suite twice and files the result as the item's own
-        # proof. HARD.
+        # proof. Hard.
         if c.get("run") and is_whole_suite_run(str(c.get("run"))):
             issues.append(
                 f"vet plan check {label!r}: {WHOLE_SUITE_IS_BUILDS} It runs every cycle and the "
@@ -173,7 +173,7 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
                 "Drop this check, or narrow the command to the ONE behaviour this item promises "
                 "(a single test, a scenario) and say in `proves:` what that green means for the "
                 "owner")
-        # A check needs a bar that can FAIL: a binary `expect`, or a rubric judged criterion by
+        # A check needs a bar that can fail: a binary `expect`, or a rubric judged criterion by
         # criterion. Either suffices.
         if not c.get("expect") and not c.get("rubric"):
             issues.append(f"vet plan check {label!r}: needs `expect` (a binary pass condition), "
@@ -201,7 +201,7 @@ def vet_plan_soft_flags(vp: dict) -> list[str]:
     flags: list[str] = []
     for c in vp.get("checks", []):
         exp, cid = c.get("expect", ""), c.get("id") or "(unnamed)"
-        # A check INHERITED from the library is not this planner's prose — flagging it asks the
+        # A check inherited from the library is not this planner's prose — flagging it asks the
         # wrong author.
         if c.get("source") == "library":
             continue
@@ -211,7 +211,7 @@ def vet_plan_soft_flags(vp: dict) -> list[str]:
             flags.append(f"{cid}: targets the RETIRED doc spec.md (read-only) — this check can't "
                          "pass through the loop; drop it or migrate the doc's content to "
                          "architecture/decisions (an authorized contract change)")
-        proves = c.get("proves", "")   # missing entirely is a HARD issue, not a soft flag
+        proves = c.get("proves", "")  # missing entirely is a hard issue, not a soft flag
         if proves and (m := _PROVES_MACHINE.search(proves)):
             flags.append(f"{cid}: proves is written in the command's terms ({m.group(0)!r}) — say "
                          "what is true of the PRODUCT when this passes; the owner reads this line "
@@ -220,7 +220,7 @@ def vet_plan_soft_flags(vp: dict) -> list[str]:
             flags.append(f"{cid}: proves is very short ({len(proves)} chars) — one full sentence, "
                          "readable on its own")
         if not exp:
-            continue  # missing entirely is a HARD issue, not a soft flag
+            continue  # missing entirely is a hard issue, not a soft flag
         if _VET_VAGUE.search(exp):
             flags.append(f"{cid}: expect contains a non-falsifiable word "
                          f"({_VET_VAGUE.search(exp).group(0)!r})")

@@ -49,7 +49,7 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
                 system_fragments = parsed
         except Exception:  # noqa: BLE001 — a corrupt capture must still render (fallback card)
             system_fragments = None
-    # What the turn was ALLOWED to do — the prose alone cannot explain two runs on the same words.
+    # What the turn was allowed to do — the prose alone cannot explain two runs on the same words.
     surface = None
     try:
         parsed = json.loads(rec.get("turn_surface") or "null")

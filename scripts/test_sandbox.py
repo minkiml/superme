@@ -76,7 +76,7 @@ def test_code_touching_runs_are_sandboxed():
     # refused with no path to allow.
     ok("...and the phase runners hand the shell the same folder they sandbox",
        runs.count("\n        write_boundary=[item_dir]") == 2)
-    # The one place the lists may differ, and only by ADDING: the sandbox gets the union, never
+    # The one place the lists may differ, and only by adding: the sandbox gets the union, never
     # less.
     ok("the research worktree reaches the shell and the kernel together",
        "shell_roots=scratch_tree" in runs
@@ -89,7 +89,7 @@ def test_code_touching_runs_are_sandboxed():
 
 
 def test_the_two_boundaries_cannot_drift():
-    """Every sandboxed runner hands the sandbox the SAME roots it hands the permission layer."""
+    """Every sandboxed runner hands the sandbox the same roots it hands the permission layer."""
     loop = src("superme_agent/daemon/services/loop.py")
     for line in loop.splitlines():
         if "sandbox_writes=" in line:
@@ -120,9 +120,7 @@ def test_the_stale_claim_is_gone():
 
 
 def test_a_run_has_somewhere_to_put_a_temp_file():
-    """A boundary saying only where you may NOT write is half a rule.
-
-    The system temp dir is outside every granted root, so an item carries `scratch/`."""
+    """A boundary saying only where you may not write is half a rule."""
     import asyncio
     import tempfile
 
@@ -185,9 +183,7 @@ def test_a_run_has_somewhere_to_put_a_temp_file():
 
 
 def test_the_shell_may_name_what_the_write_tools_may_not():
-    """A sweep reads one tree and writes to another, so its honest commands name both.
-
-    `shell_roots` widens what the SHELL may name without widening what any write tool may touch."""
+    """A sweep reads one tree and writes to another."""
     import asyncio
     import tempfile
 
@@ -227,9 +223,7 @@ def test_the_shell_may_name_what_the_write_tools_may_not():
 
 
 def test_a_search_pattern_is_not_a_place():
-    """The boundary reads a command's `/…` tokens as paths, and a regex is spelled like one.
-
-    A sweep whose files were in bounds was refused for its own grep pattern."""
+    """The boundary reads a command's `/…` tokens as paths, and a regex is not one."""
     import asyncio
     import tempfile
 
@@ -246,7 +240,7 @@ def test_a_search_pattern_is_not_a_place():
 
     async def verdicts():
         cases = [
-            # Every FILE is in bounds; only the pattern looks like a path.
+            # Every file is in bounds; only the pattern looks like a path.
             f"grep -v '/generated/' {s}/all.txt | grep -E '\\.(py|ts)$' > {s}/src.txt",
             f"sed -n '/^def /p' {s}/all.txt > {s}/defs.txt",
             f"awk '/^import/ {{print $2}}' {s}/all.txt > {s}/imports.txt",
@@ -266,9 +260,7 @@ def test_a_search_pattern_is_not_a_place():
 
 
 def test_research_cannot_reach_the_codebase():
-    """A research sweep reads a throwaway checkout and writes only its own folder.
-
-    Every way out is closed at the callback, and the kernel holds the same two roots."""
+    """A research sweep reads a throwaway checkout and writes only its own folder."""
     import asyncio
     import tempfile
 
@@ -311,10 +303,7 @@ def test_research_cannot_reach_the_codebase():
 
 
 def test_the_kernel_counts_what_it_refused():
-    """A report cannot claim no tool was unavailable when calls were refused.
-
-    Each refusal is read once, hundreds of calls earlier, so the count is what the agent cannot
-    reconstruct."""
+    """A report cannot claim no tool was unavailable when calls were refused."""
     import asyncio
     import re
 
@@ -343,8 +332,7 @@ def test_the_kernel_counts_what_it_refused():
 
 
 def test_a_kernel_device_is_not_a_place():
-    """`/dev/null` names a device, not a directory anyone can be inside. Asking whether it sits in
-    a write boundary is a category error, and answering `no` refused real work."""
+    """`/dev/null` names a device, not a directory anyone can be inside."""
     from superme_agent.core import permissions as perms
 
     roots = [Path("/tmp/boundary")]
@@ -357,11 +345,7 @@ def test_a_kernel_device_is_not_a_place():
 
 
 def test_an_escaping_command_names_the_path_that_escaped():
-    """A Bash command naming ONE path outside the boundary is told which one.
-
-    Live 2026-08-30: a vet probe mistyped an item id in a `mkdir`, so an otherwise-legal command
-    escaped. The refusal it got was the approval fallback — "not a judgment on this particular
-    call" — which was false, and vet gave up a check rather than fixing one character."""
+    """A Bash command naming one path outside the boundary is told which one."""
     from superme_agent.core.permissions import _bash_escaping_paths
     wt = Path("/tmp/wt/item-a")
     item = Path("/tmp/knowledge/work-items/item-a")
@@ -396,24 +380,16 @@ def test_an_escaping_command_names_the_path_that_escaped():
 
 
 def test_a_literal_path_shortcut_is_seen_through():
-    """`ITEM=/abs/path; cat "$ITEM/f"` is judged on the path, not refused for using a variable.
-
-    Live 2026-08-30: 4 of one run's 5 refusals were an agent reading its OWN folder through a
-    shortcut it had just assigned. The same command with the path spelled out twice is allowed.
-
-    ONLY a plain literal assignment is followed. The controls below are the point: a shortcut can
-    hide a command (`X=$(...)`) or walk back out (`$X/../..`), and following either would flip the
-    error from 'refuses too much' to 'allows outside the boundary'."""
+    """A shortcut assigned a literal absolute path is judged on the path, not refused."""
     from superme_agent.core.permissions import (_expand_literal_assignments,
                                                 _bash_escaping_paths,
                                                 _bash_scoped_into_boundary, is_read_only_bash)
-    # A POSIX literal, not `str(Path(...))`: on Windows that is backslashed, so the test would
-    # assert about a command no agent would ever write.
+    # A POSIX literal. On Windows `str(Path(...))` is backslashed, which no agent would write.
     ITEM = "/tmp/knowledge/work-items/item-a"
     item = Path(ITEM)
     roots = [item]
 
-    # THE CASE THIS EXISTS FOR — the command that was refused live.
+    # The case this exists for — the command that was refused live.
     real = (f'ITEM={ITEM}; echo "--item--"; cat "$ITEM/item.md" 2>/dev/null; '
             f'ls "$ITEM/artifacts"')
     ok("the shortcut is followed to its path",
@@ -423,50 +399,49 @@ def test_a_literal_path_shortcut_is_seen_through():
        _bash_scoped_into_boundary(_expand_literal_assignments(real), roots))
     ok("...and it does not escape", not _bash_escaping_paths(_expand_literal_assignments(real), roots))
 
-    # CONTROL 1 — walking back out of the boundary must still escape.
+    # Control 1 — walking back out of the boundary must still escape.
     out = f'ITEM={ITEM}; cat "$ITEM/../../../etc/passwd"'
     ok("a shortcut walked back OUT of the boundary still escapes",
        bool(_bash_escaping_paths(_expand_literal_assignments(out), roots)))
     ok("...and is not read as scoped in",
        not _bash_scoped_into_boundary(_expand_literal_assignments(out), roots))
 
-    # CONTROL 2 — a shortcut holding a COMMAND is never followed.
+    # Control 2 — a shortcut holding a command is never followed.
     for hidden in (f'ITEM=$(cat /etc/secret); cat "$ITEM/f"',
                    f'ITEM=`cat /etc/secret`; cat "$ITEM/f"',
                    f'ITEM=${{OTHER}}/x; cat "$ITEM/f"'):
         ok(f"a shortcut hiding a command is left alone: {hidden[:22]}",
            "$ITEM" in _expand_literal_assignments(hidden))
 
-    # CONTROL 3 — an assignment to a RELATIVE path proves nothing about where it lands.
+    # Control 3 — an assignment to a relative path proves nothing about where it lands.
     rel = 'ITEM=../elsewhere; cat "$ITEM/f"'
     ok("a relative shortcut is not followed", "$ITEM" in _expand_literal_assignments(rel))
 
-    # CONTROL 4 — the last assignment wins, and an unassigned name stays unexpanded.
+    # Control 4 — the last assignment wins, and an unassigned name stays unexpanded.
     two = f'ITEM=/tmp/other; ITEM={ITEM}; cat "$ITEM/f"'
     ok("a reassigned shortcut takes its LAST value",
        _expand_literal_assignments(two).rstrip().endswith(f'cat "{ITEM}/f"'))
     ok("a name that was never assigned is left alone",
        "$NOPE" in _expand_literal_assignments('cat "$NOPE/f"'))
 
-    # CONTROL 5 — expansion is for JUDGING only; a command outside stays outside.
+    # Control 5 — expansion is for judging only; a command outside stays outside.
     outside = 'P=/etc; cat "$P/passwd"'
     ok("expanding does not smuggle an outside path in",
        bool(_bash_escaping_paths(_expand_literal_assignments(outside), roots)))
 
-    # CONTROL 6 — the one place this LOOSENS: an assignment naming an outside path that the
-    # command never uses. Naming a path is not touching it, so this is allowed on purpose.
+    # Control 6, the one place this loosens. An assignment naming an outside path the command
+    # never uses.
     unused = f'P=/etc; cat {ITEM}/f'
     ok("an outside path that is assigned but never used no longer blocks the command",
        not _bash_escaping_paths(_expand_literal_assignments(unused), roots))
     ok("...but the moment it IS used, it escapes again",
        bool(_bash_escaping_paths(_expand_literal_assignments(f'P=/etc; cat "$P/passwd"'), roots)))
 
-    # CONTROL 7 — `${ITEM}` is the same shortcut as `$ITEM`.
+    # Control 7 — `${ITEM}` is the same shortcut as `$ITEM`.
     braced = f'ITEM={ITEM}; cat "${{ITEM}}/item.md"'
     ok("the braced form is followed too", ITEM in _expand_literal_assignments(braced))
 
-    # CONTROL 8 — the other two absolute conventions. A shortcut holding a native Windows path
-    # was left unexpanded, so on that platform the whole allowance did nothing.
+    # Control 8, the other two absolute conventions. A native Windows path was left unexpanded.
     for shape in ('ITEM=C:\\Users\\me\\item; cat "$ITEM/f.md"',
                   'ITEM=\\\\share\\wt; cat "$ITEM/f.md"'):
         ok(f"a drive or UNC shortcut is followed: {shape[:16]}",

@@ -20,10 +20,10 @@ except ImportError:  # the harness env ships pyyaml; degrade loudly rather than 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MAX_DESC = 1024          # routing budget — the only metadata an agent sees when choosing
 MAX_NAME = 64
-# A learned artifact must use a model ALIAS, never a pinned id: the backend resolves aliases at
+# A learned artifact must use a model alias, never a pinned id: the backend resolves aliases at
 # consumption.
 MODEL_ALIASES = {"sonnet", "opus", "haiku", "inherit"}
-SKILL_BODY_HARD = 500    # spec ceiling for SKILL.md
+SKILL_BODY_HARD = 500  # spec ceiling for skill.md
 LEAN_BODY_WARN = 200     # a *learned* skill/agent should be tighter than the ceiling
 
 

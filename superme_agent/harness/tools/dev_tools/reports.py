@@ -26,7 +26,7 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
     async def file_plan_report(args: dict) -> dict:
         """The plan gate's user report.
 
-        The confirmation table is DERIVED from the verification plan's checks, and so are the stats."""
+        The confirmation table is derived from the verification plan's checks, and so are the stats."""
         from ....core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):

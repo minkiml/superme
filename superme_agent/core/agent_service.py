@@ -79,7 +79,7 @@ def _result_text(content) -> str:
 
 
 def _sum_tokens(usage: dict | None) -> int:
-    """The "critical" token usage: fresh input + output + cache writes. EXCLUDES
+    """The "critical" token usage: fresh input + output + cache writes. Excludes
     cache_read, which would dwarf real work."""
     if not usage:
         return 0
@@ -152,9 +152,9 @@ class AgentService:
     """Runs SDK turns for any surface, emitting TurnEvents."""
 
     def __init__(self, persona: str | None = None):
-        # The portable SELF (WHO), loaded once from the in-code harness.
+        # The portable SELF (who), loaded once from the in-code harness.
         self._persona = persona if persona is not None else SELF_FILE.read_text(encoding="utf-8")
-        # Per-mode charters (WHAT MODE), loaded once. Selected by Context.mode per turn.
+        # Per-mode charters (what mode), loaded once. Selected by Context.mode per turn.
         self._charters = {
             mode: fill_charter_paths(path.read_text(encoding="utf-8"))
             for mode, path in CHARTER_FILES.items() if path.exists()
@@ -162,7 +162,7 @@ class AgentService:
         # Real contextWindow per model, so per-step frames divide by the same window the Result
         # does. Warms after the first turn.
         self._window_by_model: dict[str, int] = {}
-        # Measured context FLOOR per (context, model) — see measure_context_floor.
+        # Measured context floor per (context, model) — see measure_context_floor.
         self._floor_by_key: dict[str, tuple[int, int]] = {}
 
     async def measure_context_floor(self, ctx: Context, model: str | None = None
@@ -201,7 +201,7 @@ class AgentService:
         if (skills_root := _skills_root(ctx.mode)) is not None:
             rows.append(("skill packages", f"`{skills_root}/<skill>/` — what a skill's own "
                                            "`templates/…` and `references/…` are relative to"))
-        # ABSOLUTE paths: the knowledge trees do not live under the cwd, so relative ones silently
+        # Absolute paths: the knowledge trees do not live under the cwd, so relative ones silently
         # miss.
         if ctx.internal_root:
             core_root = ctx.knowledge_root or (ctx.internal_root / "core")
@@ -234,7 +234,7 @@ class AgentService:
                 text += f"\n\n## This project\n{digest}"
         return text
 
-    # The agent's ONLY feedback about a block, so each must be true of the skills it covers.
+    # The agent's only feedback about a block, so each must be true of the skills it covers.
     _SILENT_SKILL_DENY = ("This is an internal SuperMe skill — it runs only inside the learning "
                           "pipeline, not from chat.")
     _CATEGORY_DENY = {
@@ -301,13 +301,13 @@ class AgentService:
                 add_joined("Local charter — repo overlay",
                            f"local-harness/{ctx.id}/{ctx.mode}/charter.local.md",
                            local_charter.read_text(encoding="utf-8"))
-        # Frontmatter only, for ENABLED in-scope items. Bodies are pulled on demand.
+        # Frontmatter only, for enabled in-scope items. Bodies are pulled on demand.
         catalog = constitution_catalog(ctx.mode, const_universal, const_repo,
                                        activated=activated_assets)
         if catalog:
             add_joined("Constitution catalog — enabled, frontmatter only",
                        f"harness/constitution/{ctx.mode}/ + repo asset pool", catalog)
-        # Operating context: appended with NO added separator — its own text opens with "\n\n".
+        # Operating context: appended with no added separator — its own text opens with "\n\n".
         add("Operating context (where) + orientation", "agent_service._context_preamble()",
             self._context_preamble(ctx, item_bound=item_bound), sep="")
         if ctx.persona_append:
@@ -336,7 +336,7 @@ class AgentService:
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
                          activated_assets, item_bound: bool = False,
                          charter_key: str | None = None) -> str:
-        """Join `_fragment_parts` into the layer-2 system append. THE single assembler,
+        """Join `_fragment_parts` into the layer-2 system append. The single assembler,
         so a preview is byte-for-byte the real turn."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
@@ -413,11 +413,11 @@ class AgentService:
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
-            # Composed HERE, not at each runner: a run that forgets is the failure this guards.
+            # Composed here, not at each runner: a run that forgets is the failure this guards.
             hooks=_with_single_turn_hook(hooks, has_later_turn),
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
-                # `cwd` does two INDEPENDENT jobs: resolving relative reads, and pinning the shell
+                # `cwd` does two independent jobs: resolving relative reads, and pinning the shell
                 # inside the write boundary.
                 cwd=ctx.cwd,
                 read_roots=_read_roots(ctx) if scope_reads else None,
@@ -433,7 +433,7 @@ class AgentService:
             env={
                 # On by default in the CLI, and not gated by setting_sources.
                 "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
-                # The interpreter SuperMe runs under, so a shelled-out script uses it, not PATH's.
+                # The interpreter SuperMe runs under, so a shelled-out script uses it, not path's.
                 "SUPERME_PY": sys.executable,
             },
             **sandbox_options(sandbox_writes),
@@ -483,7 +483,7 @@ class AgentService:
             sandbox_writes=sandbox_writes, item_bound=item_bound, charter_key=charter_key,
         )
         resolved_model = None
-        # Fill comes from a SINGLE call, not the turn aggregate: `Result.usage` sums round-trips
+        # Fill comes from a single call, not the turn aggregate: `Result.usage` sums round-trips
         # and balloons N×.
         last_step_usage: dict | None = None
         # A tool result arrives with a tool_use_id and no name, so correlate it back to its call.
@@ -502,10 +502,10 @@ class AgentService:
                             model=resolved_model,
                         )
                 elif isinstance(message, AssistantMessage):
-                    # Non-None when the message came from INSIDE a sub-agent — the trail needs it
+                    # Non-None when the message came from inside a sub-agent — the trail needs it
                     # to say who did what.
                     parent_tuid = getattr(message, "parent_tool_use_id", None)
-                    # ONE TextDelta per assistant MESSAGE. Per-block would make the live view and
+                    # One TextDelta per assistant message. Per-block would make the live view and
                     # the reloaded transcript disagree.
                     said = "\n\n".join(b.text for b in message.content if hasattr(b, "text"))
                     if said.strip():

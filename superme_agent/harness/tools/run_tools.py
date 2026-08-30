@@ -1,7 +1,7 @@
 """Run-transport tools — the structured endings of kernel-fired runs.
 
 A two-group schema splits the payload into `machine`, which the kernel routes on, and `user`, which
-is rendered wholesale. The payload reaches the firing runner through a per-run SINK.
+is rendered wholesale. The payload reaches the firing runner through a per-run sink.
 """
 
 from __future__ import annotations

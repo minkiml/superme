@@ -104,7 +104,7 @@ def test_invariants() -> None:
                         ("set_triage_classification", "triage")):
         holders = [s for s in PHASES if tool in names(s)]
         ok(f"{tool} belongs to {owner} alone", holders == [owner], str(holders))
-    # A diagnosis session is read-only BY DESIGN — the preamble says so; now the surface does too.
+    # A diagnosis session is read-only by design — the preamble says so; now the surface does too.
     ok("diagnosis mounts reads only",
        all(n.startswith("read_") for n in names("diagnosis")), str(names("diagnosis")))
     # An unbound chat has no item to point the item pens at; they would only ever refuse.
@@ -144,15 +144,13 @@ def test_skills_name_only_visible_tools() -> None:
 
 # A computed scope is listed so it is at least accounted for.
 COMPUTED = ("scope=scope",          # the two dev_mcp helpers, forwarding their caller's choice
-            "scope=skill",          # the generic intake runner: the skill it fires IS the scope
+            "scope=skill",  # the generic intake runner: the skill it fires is the scope
             "scope=tool_scope",     # ws.py: session kind, or the bound item's current phase
             'scope=str(live_item.get("phase") or phase)')   # deputy send-back, post review→plan flip
 
 
 def _call_at(text: str, start: int) -> str:
-    """The whole call expression starting at `start`, paren-matched.
-
-    A regex misses sites whose scope is itself a call, and an unseen site cannot be checked."""
+    """The whole call expression starting at `start`, paren-matched."""
     depth, i = 0, text.index("(", start)
     for j in range(i, len(text)):
         if text[j] == "(":
@@ -165,9 +163,7 @@ def _call_at(text: str, start: int) -> str:
 
 
 def _arg_after(call: str, key: str) -> str:
-    """The argument value following `key`, ending at the first top-level comma.
-
-    A scope that is itself a call keeps its parens, and a trailing comment never joins the value."""
+    """The argument value following `key`, ending at the first top-level comma."""
     rest = call[call.index(key) + len(key):]
     depth = 0
     for i, ch in enumerate(rest):
@@ -220,9 +216,7 @@ if __name__ == "__main__":
 
 
 def test_a_scoped_tool_is_not_refused_by_policy() -> None:
-    """A tool can be registered, scoped to a phase, and still refused at the callback.
-
-    Nothing joins the two lists, so a background run is denied with nobody to ask."""
+    """A tool can be registered, scoped to a phase, and still refused at the policy layer."""
     from superme_agent.harness.policy import is_safe
     from superme_agent.harness.tools.dev_tools import TOOL_SCOPES
 

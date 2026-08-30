@@ -67,8 +67,7 @@ SELF_RULES: list[tuple[re.Pattern, re.Pattern, str]] = [
      re.compile(r"\b(absolutely|extremely|very|really|truly)\s+\w", re.I), "stacked intensifier"),
 ]
 
-# Deliberate sharing. Each entry is a reviewed decision, not a silenced warning: the frame states
-# the rule, the interjection catches an agent that broke it anyway.
+# Deliberate sharing. Each entry is a reviewed decision, not a silenced warning.
 DUPLICATION_ALLOWED: set[tuple[str, ...]] = {
     # Delivered by git itself and by the permission layer. An agent may meet either alone.
     ("core/git_layer.py::_COMMIT_MSG_HOOK", "core/permissions.py::_NO_VERIFY_NUDGE"),
@@ -259,9 +258,7 @@ def check_duplication(units) -> None:
              f"{len(runs)} shared runs, e.g. \"{longest[:70]}…\"")
 
 
-# An injected template rides EVERY turn, so it only beats a one-off read while it stays small.
-# Break-even is roughly template x turns-before-it-is-needed vs one turn's context; 4,000c keeps a
-# wide margin at the ~15-turn mark where reports get written.
+# An injected template rides every turn, so it only beats a one-off read while it stays small.
 def main() -> None:
     units = prompt_units()
     registry = rendered()

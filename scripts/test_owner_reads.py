@@ -1,10 +1,4 @@
 """Two things the owner reads: the materials line, and a report's own heading.
-
-Measured 2026-08-29: agents composed `work-items/<id>/plan.md` and missed 23 times since Aug 1 —
-the real path carries an `artifacts/` segment. One vet run listed the folder and STILL built the
-wrong path, twice, so it ran without the brief. Naming the paths removes the composing.
-
-Run: PYTHONPATH=. python scripts/test_owner_reads.py
 """
 
 import sys
@@ -45,7 +39,7 @@ def main() -> None:
         ok("every file is named with its real subdirectory",
            "`artifacts/brief.md`" in line and "`artifacts/plan.md`" in line
            and "`reports/report-triage.md`" in line)
-        # THE POINT. The bare form is what the agent kept composing; it must not appear.
+        # The point. The bare form is what the agent kept composing; it must not appear.
         ok("the bare `plan.md` form is nowhere in the line", "`plan.md`" not in line)
         ok("nor the bare `brief.md`", "`brief.md`" not in line)
 
@@ -77,11 +71,7 @@ def main() -> None:
 
 
 def report_heading() -> None:
-    """`file_phase_report` REFUSES a malformed report instead of filing it.
-
-    Measured across 652 filed reports: 21 opened with something other than their `# ` title (16 of
-    them in August alone, so this is current) and 3 carried junk on the heading line — `ptr#`,
-    `-#`, `\\#`. The owner reads both verbatim in the drilldown."""
+    """`file_phase_report` refuses a malformed report instead of filing it."""
     import asyncio, tempfile
     from superme_agent.core.artifacts import report_body_issues as issues
     from superme_agent.harness.tools.dev_tools.reports import _file_phase_report
@@ -130,10 +120,7 @@ main()
 
 
 def _bullet_slots(body: str) -> list[str]:
-    """Every slot that asks for bullets, split down to the labels nested inside one `<fill:>`.
-
-    A slot ends at the `>` that closes it — but `<name>` inside the prose closes it early, which is
-    how the uncapped labels stayed invisible. Scan for the LAST `>` on the fill's own lines."""
+    """Every slot that asks for bullets, split down to the labels inside one `<fill:>`."""
     slots: list[str] = []
     for chunk in body.split("<fill:")[1:]:
         cut = chunk.rfind(">")
@@ -146,23 +133,20 @@ def _bullet_slots(body: str) -> list[str]:
 def user_report_style() -> None:
     """User-facing reports are bullets under 20 words, not paragraphs.
 
-    Owner's rule, 2026-08-29: these exist so a reader coming back COLD can rebuild context, decide,
-    and move — not to carry every detail. The old rule was "fewer words wins", which is not a
-    signal anyone can check, and the reports read as dense prose because the TEMPLATES asked for
-    "plain sentences" in 100-250 word slots."""
+    A reader coming back cold rebuilds context and decides."""
     print("\nuser-facing reports — the templates ask for bullets, and every skill says so")
     root = Path(__file__).resolve().parent.parent
     skills = root / "superme_agent/harness/plugins/superme-dev/skills"
 
-    # The agent copies the TEMPLATE, so the template is where shape is decided.
+    # The agent copies the template, so the template is where shape is decided.
     agent_filled = {"triage", "review", "build", "close", "investigate"}
     for name in sorted(agent_filled):
         tpl = next((skills / name / "templates").glob("report-*template.md"))
         body = tpl.read_text(encoding="utf-8")
         ok(f"{name}: its slots ask for bullets", "bullet" in body.lower())
         ok(f"{name}: no slot still asks for 'plain sentences'", "plain sentences" not in body)
-        # Per SLOT, not per file: investigate capped `What` and left `Proof`/`Do` open, and a
-        # whole-file substring check let the capped slot vouch for its uncapped neighbours.
+        # Per slot, not per file. A whole-file substring check lets one capped slot vouch for its
+        # uncapped neighbours.
         for slot in _bullet_slots(body):
             ok(f"{name}: capped — {slot[:44]}", "under 20 words" in slot)
 
@@ -181,12 +165,7 @@ def user_report_style() -> None:
 user_report_style()
 
 def vet_lens_shape() -> None:
-    """`What else was looked at` is one bullet per lens, and code refuses anything else.
-
-    Live 2026-08-30: vet wrote its three lenses as one run-together paragraph. `_bold_lenses`
-    only fires on a bullet opener, so it matched nothing and the slot rendered as a wall of prose
-    with no label — a formatter that no-ops instead of complaining. The vet report is a
-    format-string template, not a `<fill:>` one, so the template pass never reached it."""
+    """The lens slot is one bullet per lens, and code refuses anything else."""
     print("\nvet report — the lenses are bullets, and a paragraph is refused")
     from superme_agent.core.artifacts.user_reports import lens_slot_issues, _bold_lenses
 
@@ -211,14 +190,14 @@ def vet_lens_shape() -> None:
        bool(lens_slot_issues("- Read the diff against the sibling commands.")))
     ok("an empty slot is not an error", not lens_slot_issues(""))
     # A lens the author already emphasised is still a lens opener. Refusing it would reject
-    # correct input, and the surface has always accepted a pre-bolded name.
+    # correct input.
     for already in ("- **Safety:** already bold", "- *Robustness:* italic",
                     "- **Safety**: outside the colon"):
         ok(f"an emphasised lens is accepted: {already[:18]}", not lens_slot_issues(already))
     ok("...and bolding one stays idempotent",
        _bold_lenses("- **Safety:** already bold") == "- **Safety:** already bold")
 
-    # The refusal has to land BEFORE the write, or a malformed report still reaches the owner.
+    # The refusal has to land before the write, or a malformed report still reaches the owner.
     from superme_agent.core.artifacts.user_reports import write_vet_user_report
     with tempfile.TemporaryDirectory() as d:
         raised = ""

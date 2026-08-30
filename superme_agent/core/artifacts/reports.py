@@ -22,13 +22,13 @@ def _space_labels(text: str) -> str:
     return "\n".join(out)
 
 
-# A value meaning the author had nothing to say. Every template says DELETE the block instead.
+# A value meaning the author had nothing to say. Every template says delete the block instead.
 _DEAD_VALUES = {"", "none", "none.", "n/a", "na", "-", "—", "nothing", "(none)",
                 "(first run — n/a)", "(first run - n/a)", "first run — n/a", "first run - n/a"}
 
 
 def _dead_label(lines: list[str], i: int) -> bool:
-    """Is the `**Label:**` at `lines[i]` a block with nothing under it? The next NON-BLANK
+    """Is the `**Label:**` at `lines[i]` a block with nothing under it? The next NON-blank
     line decides."""
     if lines[i].split(":**", 1)[1].strip().lower() not in _DEAD_VALUES:
         return False
@@ -49,7 +49,7 @@ def _live_body(lines: list[str]) -> bool:
 
 
 def _drop_dead_blocks(text: str) -> str:
-    """Delete `**Label:** none` blocks on the READ path — lines that exist only to say
+    """Delete `**Label:** none` blocks on the read path — lines that exist only to say
     nothing. Deliberately literal."""
     lines, out = text.split("\n"), []
     i, fenced = 0, False
@@ -114,7 +114,7 @@ def report_text(item_dir: Path, phase: str) -> dict | None:
     contract = {"triage": "artifacts/brief.md", "plan": "artifacts/plan.md",
                 "investigate": "artifacts/investigation.md",
                 # Review has a record its report could not reach. Close is still None: its report
-                # IS the record.
+                # is the record.
                 "review": "artifacts/review.md"}.get(phase)
     if phase in ("build", "vet"):
         # The cycle the report covers is the newest one — build and vet both project the same file.
@@ -133,7 +133,7 @@ def report_text(item_dir: Path, phase: str) -> dict | None:
             "path": str(path), "mtime": st.st_mtime, "contract": contract}
 
 
-# A `**Label:** value` on ONE line — how every one-line fact in a report is written.
+# A `**Label:** value` on one line — how every one-line fact in a report is written.
 _LABEL_VALUE = re.compile(r"^\*\*(?P<label>[^*\n]+?):\*\*[^\S\n]*(?P<value>.*?)\s*$", re.M)
 
 
@@ -156,7 +156,7 @@ def report_summary(item_dir: Path, phase: str) -> str:
 
 
 def triage_facts(item_dir: Path) -> dict:
-    """What triage established, for the `About this work-item` card. Read from the OWNER's
+    """What triage established, for the `About this work-item` card. Read from the owner's
     brief: this is their own framing."""
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
@@ -193,7 +193,7 @@ def report_body_issues(body: str) -> list[str]:
 
 def report_issues(item_dir: Path, name: str) -> list[str]:
     """Itemized issues on a user-facing report: present, and no template slot unfilled.
-    A report is COPIED, not scaffolded."""
+    A report is copied, not scaffolded."""
     path = Path(item_dir) / "reports" / f"{name}.md"
     if not path.is_file():
         return [f"reports/{name}.md does not exist — write it from its template"]
@@ -204,7 +204,7 @@ def report_issues(item_dir: Path, name: str) -> list[str]:
     return []
 
 
-# `[^\S\n]*`, not `\s*`: in MULTILINE `\s` matches newlines, so an empty line would capture the
+# `[^\S\n]*`, not `\s*`: in multiline `\s` matches newlines, so an empty line would capture the
 # next heading.
 _OWNER_DECISION = re.compile(r"^\*\*Owner's decision:\*\*[^\S\n]*(.+?)\s*$", re.M)
 
@@ -237,12 +237,12 @@ def proposed_work(item_dir: Path) -> str:
 
 # --------------------------------------------------------------------------- PR review notes
 
-# What the PR page shows BESIDE each task's commits. Not a second opinion: the review report
+# What the PR page shows beside each task's commits. Not a second opinion: the review report
 # answers whether to land.
 
 def delivered_line(item_dir: Path) -> str:
     """`artifacts/review.md`'s **Delivered** field, read by the landing commit's body.
-    Reads the whole PARAGRAPH: the file is prose wrapped for reading."""
+    Reads the whole paragraph: the file is prose wrapped for reading."""
     path = Path(item_dir) / "artifacts" / "review.md"
     try:
         if not path.is_file():

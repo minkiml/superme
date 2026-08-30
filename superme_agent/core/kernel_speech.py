@@ -1,6 +1,6 @@
 """Kernel speech — every in-code prompt the kernel says to an agent.
 
-Admission: AGENT-consumed, and not bound to a code object that is its natural surface. Layers
+Admission: Agent-consumed, and not bound to a code object that is its natural surface. Layers
 are triggers (durable) · preambles (per-turn) · assemblers. `test_thread3` snapshots every entry.
 """
 
@@ -122,7 +122,7 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
             base += ("\n\nA check marked PASSED ONCE ONLY is a defect in the CHECK, not evidence "
                      "against the code — the code passed on a clean state. Report it as a finding "
                      "about the plan's verification, and do not fail the item for it.")
-    # Only DISAGREEMENTS are named: an audit that agreed is the expected case. Orientation, not
+    # Only disagreements are named: an audit that agreed is the expected case. Orientation, not
     # the record.
     if (bad := [a for a in (audit or []) if not a.get("agrees")]):
         lines = "\n".join(
@@ -146,7 +146,7 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
 
 
 def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
-    """The loop's ENTRY build run · durable. Build-first, because a vet against
+    """The loop's entry build run · durable. Build-first, because a vet against
     an empty tree is a wasted look."""
     return (
         f"The build⟷vet loop just entered BUILD for work-item `{item_id}` (\"{title}\") — this is "
@@ -314,7 +314,7 @@ def capture_trigger(slice_text: str, focus: str | None = None) -> str:
 # Per-kind session preambles: per-turn system layer, never durable. Adding an agent means a
 # preamble here, not a conditional.
 
-# Thin preamble, thick skill: one line of WHAT, plus the skill that owns the procedure. Constants
+# Thin preamble, thick skill: one line of what, plus the skill that owns the procedure. Constants
 # only.
 _PHASE_CONTRACTS: dict[str, dict] = {
     "triage":      {"skill": "triage",
@@ -336,7 +336,7 @@ _PHASE_CONTRACTS: dict[str, dict] = {
                     "what": "answer the plan's research questions within its boundaries — read-only on code"},
 }
 
-# EMPTY by design: kind variation belongs in a skill's TEMPLATES, never a second skill. Kept as a
+# Empty by design: kind variation belongs in a skill's templates, never a second skill. Kept as a
 # seam.
 _KIND_PHASE_CONTRACTS: dict[tuple[str, str], dict] = {}
 
@@ -383,7 +383,7 @@ def _materials_on_disk(item_dir) -> str:
         names = {sub: sorted(f.name for f in (Path(item_dir) / sub).glob("*.md") if f.is_file())
                  for sub in ("artifacts", "reports")}
     except (OSError, ValueError, TypeError):
-        return ""   # the preamble rides EVERY turn; a bad path must never break one
+        return ""  # the preamble rides every turn; a bad path must never break one
     out: list[str] = []
     for sub, files in names.items():
         series: dict[str, list[str]] = {}
@@ -430,7 +430,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         "the file, you have not read it.",
     ]
     if c:
-        # The skill name rides EVERY turn: a trigger is one message, and compaction can summarize
+        # The skill name rides every turn: a trigger is one message, and compaction can summarize
         # it away.
         lines.append(f"\n**This phase:** {c['what']} — procedure in the `superme-dev:{c['skill']}` "
                      f"skill.")
@@ -450,7 +450,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "your report and name what you needed. That is evidence this item was misjudged as "
             "small, and it is the owner's call to make, not yours to absorb."
         )
-    # Stated for EVERY phase, not just investigate: review reads findings against the family's
+    # Stated for every phase, not just investigate: review reads findings against the family's
     # bar.
     if (fam := kind_profiles.research_kind(item)):
         why = str(item.get("research_kind_reason") or "").strip()
@@ -492,8 +492,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "file the report with `file_vet_report`."
         )
     elif wt and kind_profiles.get_profile(kind).scratch_worktree:
-        # A SCRATCH tree: same shape as a build worktree, opposite meaning. It checks out the
-        # ANCHOR, and nothing lands.
+        # A scratch tree: same shape as a build worktree, opposite meaning. It checks out the
+        # anchor, and nothing lands.
         base = item.get("git_base")
         lines.append(
             f"\n**Where you are reading:** `{wt}/` — a detached, throwaway checkout of "
@@ -509,7 +509,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             f"you read."
         )
     elif wt:
-        # The branch BASE rides here too: review diffs `<base>...HEAD`, and nothing else in the
+        # The branch base rides here too: review diffs `<base>...HEAD`, and nothing else in the
         # session carries that commit.
         base = item.get("git_base")
         lines.append(
@@ -556,7 +556,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     if compacted_checkpoint:
         lines.append(compaction_notice(compacted_checkpoint))
     if interactive and phase == "review":
-        # Here, not in review/SKILL.md: the turn hosting the review conversation never invokes the
+        # Here, not in review/skill.md: the turn hosting the review conversation never invokes the
         # phase skill.
         lines.append(
             "\n**Routing:** `plan.md` is not yours to edit here — the only way it changes is by "
@@ -583,7 +583,7 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "CONTRACT change you can't self-authorize → `request_authorization` (defers it to the "
             "review gate). Either way, finish what you can. End the run by calling "
             "`report_completion` — that call IS your closing statement, so say nothing after it.\n"
-            # A run costs the SUM of its growing transcript: a result read at step i is re-sent
+            # A run costs the sum of its growing transcript: a result read at step i is re-sent
             # (N−i) times.
             "\n**Read the span, not the file.** What you read stays in this run's context and is "
             "re-sent on every step after it, so a big file read early is paid many times over. "
@@ -650,8 +650,8 @@ def onboarding_preamble(mode: str | None = None) -> str:
 
 
 def diagnosis_preamble(run: dict | None, run_id: int) -> str:
-    """Every turn of a diagnosis session. Small and STABLE so it caches; the
-    subject's TRACE is injected once at birth."""
+    """Every turn of a diagnosis session. Small and stable so it caches; the
+    subject's trace is injected once at birth."""
     run = run or {}
     feature = run.get("feature") or "chat"
     status = run.get("status") or "?"
@@ -678,7 +678,7 @@ def diagnosis_preamble(run: dict | None, run_id: int) -> str:
     )
 
 
-# The dial moves ONLY this discretionary band; the refusal floor holds at every level.
+# The dial moves only this discretionary band; the refusal floor holds at every level.
 _DEPUTY_STRICTNESS = {
     "low": "Maximum delegated autonomy. Approve on your own when vet's coverage is reasonable, and "
            "handle gaps by sending back. Escalate ONLY for decisions the mandate reserves for the "
@@ -761,7 +761,7 @@ def _cap(text: str, cap: int) -> str:
 
 _DEPUTY_MANDATE_CAP = 3_000
 _DEPUTY_LOG_CAP = 2_000
-# A RUNAWAY GUARD, not a summarizer: reports are scaffold-capped already, so this should never
+# A runaway guard, not a summarizer: reports are scaffold-capped already, so this should never
 # fire.
 _DEPUTY_REPORT_CAP = 12_000
 
@@ -781,7 +781,7 @@ def render_authorizations_block(pending: list[dict]) -> str:
 
 
 def _deputy_check_rows(state: dict) -> str:
-    """The gate's mechanical checks as the deputy reads them — the SAME rows the
+    """The gate's mechanical checks as the deputy reads them — the same rows the
     drilldown renders, off one call."""
     checks = state.get("checks") or []
     if not checks:
@@ -863,7 +863,7 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
     return "\n".join(parts)
 
 
-# intake NARRATES: at review it answers from the record. The watermark counts promoted ledger
+# intake narrates: at review it answers from the record. The watermark counts promoted ledger
 # entries — a stable cursor.
 
 _HANDOFF_TOTAL_CAP = 12_000
@@ -955,7 +955,7 @@ def _format_trace(run: dict, events: list[dict]) -> str:
 
 
 def diagnosis_trace_block(run: dict | None, events: list[dict], run_id: int) -> str:
-    """A diagnosis session's BIRTH turn · injected once, so later turns cache-read
+    """A diagnosis session's birth turn · injected once, so later turns cache-read
     it instead of re-sending."""
     return (
         f"### Subject activity-run trace (Activity #{run_id})\n"

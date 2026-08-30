@@ -1,7 +1,7 @@
 """Operational-learning artifacts on disk — read, assemble, publish.
 
 `constitution` is one file per item, assembled into the system prompt every turn. `skill`/`agent`
-load via the plugin channel. Disk holds only PUBLISHED artifacts; drafts stage in `dev_store`.
+load via the plugin channel. Disk holds only published artifacts; drafts stage in `dev_store`.
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
 
 def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
     """Skill names in `category`, namespaced and bare. Unlike `access: silent`,
-    a category block is a property of the SESSION."""
+    a category block is a property of the session."""
     out: set[str] = set()
     want = (category or "").strip().lower()
     for d in plugin_dirs:
@@ -164,7 +164,7 @@ def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
 
 
 def list_harness_plugins(*, dev_dir: Path, core_dir: Path, shared_dir: Path) -> list[dict]:
-    """SuperMe's OWN universal skills/agents by loading scope: `dev`, `core`,
+    """SuperMe's own universal skills/agents by loading scope: `dev`, `core`,
     `shared`. Per-repo trees are deliberately excluded."""
     return [
         {"scope": "dev", "label": "Dev", "plugin": "superme-dev",
@@ -183,7 +183,7 @@ def _is_enabled(meta: dict) -> bool:
 
 
 def is_foundational(meta: dict) -> bool:
-    """`foundational: true` marks a constitution a charter consults BY NAME.
+    """`foundational: true` marks a constitution a charter consults by name.
     Disabling one would dangle that pull."""
     return str(meta.get("foundational", "false")).strip().lower() in ("true", "1", "yes", "on")
 
@@ -238,7 +238,7 @@ def read_constitution_dir(directory: Path, *, origin: str,
     return out
 
 
-# A repo activates slugs BY REFERENCE in `.assets` — no body is ever copied.
+# A repo activates slugs by reference in `.assets` — no body is ever copied.
 
 
 HUB_CONTEXT_ID = "global"
@@ -275,7 +275,7 @@ def _repo_asset_file(repo_dir: Path) -> Path:
 
 
 def repo_asset_states(repo_dir: Path | None) -> dict[str, bool]:
-    """The asset-pool items a repo has ADOPTED → {slug: enabled}. `.assets` lines
+    """The asset-pool items a repo has adopted → {slug: enabled}. `.assets` lines
     are `slug` or `slug  # off`."""
     if repo_dir is None:
         return {}
@@ -302,12 +302,12 @@ def _write_asset_states(repo_dir: Path, states: dict[str, bool]) -> None:
 
 
 def list_repo_assets(repo_dir: Path | None) -> set[str]:
-    """ENABLED asset slugs for a repo. Adopted-but-disabled items are excluded."""
+    """Enabled asset slugs for a repo. Adopted-but-disabled items are excluded."""
     return {slug for slug, en in repo_asset_states(repo_dir).items() if en}
 
 
 def set_repo_asset(repo_dir: Path | None, slug: str, enabled: bool) -> dict[str, bool]:
-    """Enable/disable one adopted asset, adopting it first if absent. Disabling KEEPS
+    """Enable/disable one adopted asset, adopting it first if absent. Disabling keeps
     adoption. No body is ever copied."""
     if repo_dir is None:
         return {}
@@ -353,7 +353,7 @@ def _activated_asset_items(activated: set[str] | None, repo_dir: Path | None = N
 
 def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
                       activated: set[str] | None = None, asset_dir: Path | None = None) -> list[dict]:
-    """Every constitution item in a repo's scope: universal + authored + ACTIVATED
+    """Every constitution item in a repo's scope: universal + authored + activated
     assets. Includes disabled ones; callers filter."""
     items = read_constitution_dir(universal_dir, origin="universal")
     if repo_dir is not None:
@@ -364,7 +364,7 @@ def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
 
 def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, *,
                          activated: set[str] | None = None, asset_dir: Path | None = None) -> str:
-    """The always-on CATALOG: one frontmatter line per ENABLED in-scope item.
+    """The always-on catalog: one frontmatter line per enabled in-scope item.
     Bodies are pulled on demand via `read_constitution`."""
     items = [it for it in list_constitution(mode, universal_dir, repo_dir,
                                             activated=activated, asset_dir=asset_dir)
@@ -428,7 +428,7 @@ def rank_assets_by_relevance(
 
 def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, name: str, *,
                          activated: set[str] | None = None, asset_dir: Path | None = None) -> dict | None:
-    """Find one ENABLED in-scope constitution by name, or None. Scope is the dirs
+    """Find one enabled in-scope constitution by name, or None. Scope is the dirs
     and active set the caller passes."""
     want = (name or "").strip().lower()
     for it in list_constitution(mode, universal_dir, repo_dir, activated=activated, asset_dir=asset_dir):

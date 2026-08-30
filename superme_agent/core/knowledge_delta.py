@@ -1,6 +1,6 @@
 """Knowledge-delta pipeline — write discipline for the dev-knowledge anchor docs.
 
-No freehand writes: the CLOSING run supplies structured ops, they are validated, a
+No freehand writes: the closing run supplies structured ops, they are validated, a
 deterministic writer applies them. Close is the sole writer, so no doc outruns the code.
 """
 
@@ -13,7 +13,7 @@ from . import verification_library as _vl
 from .artifacts import FILL, atomic_write
 from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, parse_deliverables
 
-# The first three act on a section's BODY; rename_section rewrites the `## <heading>` LINE.
+# The first three act on a section's body; rename_section rewrites the `## <heading>` Line.
 OPS = ("update", "append", "supersede", "rename_section")
 # These two replace a body, so each carries the text it expects to replace.
 _REPLACING_OPS = ("update", "supersede")
@@ -118,7 +118,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         for slug in _SLUG_REF.findall(content):
             if slug not in prd_slugs:
                 issues.append(f"{tag}: deliverable {slug!r} is not defined in the project PRD")
-        # The one anchor doc whose content is a CONTRACT: a later plan inherits its entries
+        # The one anchor doc whose content is a contract: a later plan inherits its entries
         # verbatim.
         if doc == _vl.LIBRARY_DOC and kind != "rename_section":
             issues.extend(f"{tag}: {i}" for i in _vl.entry_issues(content))
@@ -126,7 +126,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
 
 
 def apply_ops(dev_root: Path, ops: list) -> dict:
-    """The deterministic writer: apply already-VALIDATED ops. Trusts its input and fails loud on a
+    """The deterministic writer: apply already-validated ops. Trusts its input and fails loud on a
     target that vanished."""
     if not ops:
         return {"applied": 0, "docs": []}
@@ -140,7 +140,7 @@ def apply_ops(dev_root: Path, ops: list) -> dict:
         if not m:
             raise ValueError(f"section '## {section}' vanished from {doc} — restage the delta")
         if op["op"] == "rename_section":
-            # Rewrite the heading LINE, leaving the body untouched.
+            # Rewrite the heading line, leaving the body untouched.
             texts[doc] = text[:m.start(1)] + f"## {content.strip()}\n" + text[m.end(1):]
             continue
         # Agents often re-include the `## <section>` heading. The heading stays here, so a re-

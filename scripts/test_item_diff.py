@@ -1,11 +1,4 @@
 """Review reads the item's branch, not whatever the repo root has checked out.
-
-The repo root can never have the item's branch checked out — git forbids one branch in two
-worktrees — so `base...HEAD` at the root describes a different tree. Every test here pins that
-`read_item_diff` answers from the worktree, and the CONTROL pins that the shell form it replaces
-really does answer wrong.
-
-Run: PYTHONPATH=. python scripts/test_item_diff.py
 """
 
 import asyncio
@@ -75,8 +68,8 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as td:
         repo, wt, dev = build_fixture(Path(td))
 
-        # --- THE CONTROL. Without this, the tests below prove nothing: they would pass just as
-        # well if the shell form had been fine all along.
+        # The control. Without it the tests below would pass just as well if the shell read the
+        # wrong tree.
         ok("control: `main...HEAD` at the repo root reports NO changes",
            git(repo, "diff", "--stat", "main...HEAD") == "")
         ok("control: the repo root is not on the item's branch",
@@ -130,7 +123,7 @@ def decide(fn, tool: str, args: dict):
 
 def permission_guard() -> None:
     """The shell path. The tool is only the better route until the wrong one stops answering."""
-    # Every wrong form is a REAL command pulled from August review runs.
+    # Every wrong form is a real command pulled from August review runs.
     wrong = ["git diff --stat main...HEAD",
              "git log main..HEAD --oneline",
              "git diff main...HEAD -- ledger/commands.py",
@@ -163,8 +156,7 @@ def permission_guard() -> None:
     ok("...and does not touch a genuine question about the repo root",
        type(r).__name__ == "PermissionResultAllow")
 
-    # CONTROL: every other phase is unchanged. Without the flag the same command sails through,
-    # which is what made this invisible for a month.
+    # Control: every other phase is unchanged. Without the flag the same command sails through.
     fn2 = build_can_use_tool(approve)
     r = decide(fn2, "Bash", {"command": "git diff --stat main...HEAD"})
     ok("control: without the flag the wrong form is still allowed (build/vet unchanged)",

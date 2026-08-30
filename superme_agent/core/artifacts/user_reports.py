@@ -84,7 +84,7 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     """The owner's answer to what is being built.
 
     Facts are derived from plan.md."""
-    # An OMITTED optional slot arrives as None, not "". Normalize once, here, where the type is
+    # An omitted optional slot arrives as None, not "". Normalize once, here, where the type is
     # declared.
     approach, confirm = approach or "", confirm or ""
     decisions, assumptions = decisions or "", assumptions or ""
@@ -97,10 +97,10 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     if not tasks:
         raise ValueError("plan.md declares no `## Tasks` — scaffold and fill the plan first; a "
                          "report over nothing would read as 'nothing needs proving'")
-    # One row per CHECK: the owner is approving an exam, and `proves:` IS the row, so it is never
+    # One row per check: the owner is approving an exam, and `proves:` Is the row, so it is never
     # clipped.
     rows = [f"| {c.get('proves') or '—'} | {_how_checked(c)} |" for c in vp.get("checks", [])]
-    # A research item declares no checks BY DESIGN, so the gap call-out is about implementation
+    # A research item declares no checks by design, so the gap call-out is about implementation
     # plans only.
     uncovered = [] if research else [r["task"] for r in proof_rows(item_dir)
                                      if r["task"] and not r["verified"]]
@@ -161,13 +161,13 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
             "(an unrecorded check doesn't exist)" for c in missing))
     if not by_check and not no_vet:
         raise ValueError("no checks recorded — record_verification for every plan check first")
-    # The lenses run on EVERY cycle: depth governs what is executed, not whether the work is read.
+    # The lenses run on every cycle: depth governs what is executed, not whether the work is read.
     if (missing := missing_lenses(item_dir)):
         raise ValueError("; ".join(
             f"the {ln} lens has no read this cycle — call record_lens with what you probed (no "
             "findings is a fine answer, and saying what you probed is what makes it one)"
             for ln in missing))
-    # The diagnosis duty has its teeth here: "3 checks failing" with no WHERE sends the next cycle
+    # The diagnosis duty has its teeth here: "3 checks failing" with no where sends the next cycle
     # hunting.
     if (undiag := undiagnosed_failures(item_dir)):
         raise ValueError("; ".join(
@@ -178,7 +178,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     checks = plan_ids + [c for c in by_check if c not in plan_ids]
     deferred_auth = {a["check"] for a in pending_authorizations(item_dir) if a.get("check")}
 
-    # Each check's `proves:`, so a red row says what STOPPED being true instead of naming an id
+    # Each check's `proves:`, so a red row says what stopped being true instead of naming an id
     # nobody remembers.
     proves_of = {c["id"]: str(c.get("proves") or "")
                  for c in (parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])
@@ -188,7 +188,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     deferred_all = sorted(deferred_auth | {c for c, h in by_check.items()
                                            if h and h[-1].get("deferred")})
 
-    # `## What didn't hold` is authored HERE, off the ledger, so a red check reaches the owner
+    # `## What didn't hold` is authored here, off the ledger, so a red check reaches the owner
     # regardless.
     diag = diagnoses(item_dir)
     lines = []
@@ -202,7 +202,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     for c in deferred_all:
         lines.append(f"- **{proves_of.get(c) or f'check `{c}`'}** — not checked: deferred pending "
                      "your authorization.")
-    # A lens finding that GATES belongs here for the same reason a failed check does: it sends the
+    # A lens finding that gates belongs here for the same reason a failed check does: it sends the
     # item back.
     for g in lens_gaps(item_dir):
         lines.append(f"- **{g['text']}** — raised by the {g['lens']} reading ({g['severity']}).")
@@ -216,7 +216,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
             f"wrong, but it does mean the build's word for it is not evidence. The commands and "
             f"their output are in this cycle's build record.")
     machine = ("## What didn't hold\n" + "\n".join(lines) + "\n\n") if lines else ""
-    # A `depth: none` item still gets a reading, and that reading can GATE — so this note PRECEDES
+    # A `depth: none` item still gets a reading, and that reading can gate — so this note precedes
     # the block.
     if ev.get("not_required"):
         machine = ("## What was owed\nNothing. The approved plan declares `depth: none` — this "

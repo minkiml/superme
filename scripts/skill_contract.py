@@ -113,8 +113,8 @@ def check_body(path: Path, text: str, repo: Path) -> list[tuple[str, str]]:
             continue
         # A bundle-relative pointer is the only kind whose target this gate can locate.
         if not re.search(r"(?:^|/)(?:references|templates|agents|scripts|assets)/[^/]+\.\w+$", ref):
-            # A real FILE the agent will copy verbatim. A bare folder name is a category, not
-            # a citation.
+            # A real file the agent will copy verbatim. A bare folder name is a category, not a
+            # citation.
             if ref.count("/") >= 1 and Path(ref).suffix and not ref.startswith("/") \
                     and (repo / ref).is_file():
                 bad.append(("names this repo's own file", ref))
@@ -125,9 +125,7 @@ def check_body(path: Path, text: str, repo: Path) -> list[tuple[str, str]]:
 
 
 def check_tools(skill: str, body: str) -> list[tuple[str, str]]:
-    """The join: what the body instructs against what the run mounts.
-
-    A shared scope mounts for a SESSION, so its tools need not appear in one skill."""
+    """The join: what the body instructs against what the run mounts."""
     scopes = SKILL_SCOPES.get(skill)
     if scopes is None:
         return [("not in SKILL_SCOPES", "add it, or the join goes unchecked")]
@@ -171,7 +169,7 @@ def main() -> None:
     for f in files:
         text = f.read_text(encoding="utf-8")
         folder = f.parent.name
-        # Instruction only: a description names a sibling's tool to route AWAY from it.
+        # Instruction only: a description names a sibling's tool to route away from it.
         bundle = "\n".join(_FM.sub("", p.read_text(encoding="utf-8"))
                            for p in sorted(f.parent.rglob("*.md")))
         problems = (check_frontmatter(frontmatter(text), folder)

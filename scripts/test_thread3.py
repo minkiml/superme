@@ -64,7 +64,7 @@ def test_run_protocol() -> None:
        and not hasattr(KS, "render_orient_block"))
     ok("no completion-report fence anywhere in the protocol", "completion-report" not in bg)
 
-    # The outcome vocabulary lives in the TOOL's schema (the contract's new home), not in prose.
+    # The outcome vocabulary lives in the tool's schema (the contract's new home), not in prose.
     from superme_agent.harness.tools.registry import _render_schema
     schema = _render_schema(RT.ReportCompletionArgs)
     enum = schema["properties"]["machine"]["properties"]["outcome"]["enum"]
@@ -121,9 +121,8 @@ def test_triggers() -> None:
        and "do NOT call" not in nom)
     ok("close is handed the merge commit rather than left to hunt for it",
        "abc1234" in KS.close_trigger("it1", "T", merge_commit="abc1234"))
-    # Fetching the template cost a round trip in every measured run of these phases.
-    # A template is part of its skill's PACKAGE. A trigger that carries the body puts skill content
-    # in the user message and pays for it on every request of the run.
+    # A template is part of its skill's package. A trigger carrying the body pays for it every
+    # request.
     for _ph, _fire in (("triage", KS.intake_trigger("triage", "it1", "T")),
                        ("build", KS.build_first_trigger("it1", "T")),
                        ("close", KS.close_trigger("it1", "T"))):
@@ -134,9 +133,7 @@ def test_triggers() -> None:
            f"{len(_fire)}c")
         ok(f"{_ph}'s skill names its own report template",
            tpl in (SKILLS / _ph / "SKILL.md").read_text(encoding="utf-8"))
-    # The server note rides the ENTRY trigger only, because build RESUMES its own thread. The
-    # failure hop must restate it exactly when that turn may be gone — a compaction cut it, or
-    # there is no thread to resume — and must not otherwise, or build is told twice.
+    # The server note rides the entry trigger only, and build resumes its own thread.
     _env = lambda t: "vet_env.sh" in t   # noqa: E731 — one predicate, read four ways below
     ok("the entry build trigger carries the server note",
        _env(KS.build_first_trigger("it1", "T", vet_env=True)))
@@ -207,8 +204,8 @@ def test_channels() -> None:
        AS.compose_prompt("POINTER", "TRIGGER") == f"POINTER{TURN_SEP}TRIGGER")
     ok("a turn with no pointer sends the trigger untouched",
        AS.compose_prompt(None, "TRIGGER") == "TRIGGER")
-    # The chat transcript replays these messages back to the owner. Every block SuperMe injects
-    # ahead of their words has to come back off, or they are shown 2,700 chars they never typed.
+    # The chat transcript replays these messages back to the owner, so every injected block is
+    # peeled off.
     from superme_agent.core.sessions import _strip_kernel_prefix as strip
     mine, birth = "look at the failing test", "### Work-item orientation\nstuff"
     for label, block in (("work-item", KS.work_item_preamble("it1", {"phase": "plan"}, FIXTURE_DIR,
@@ -219,18 +216,14 @@ def test_channels() -> None:
            strip(AS.compose_prompt(block, mine)) == mine)
     ok("a birth block behind the session block comes off too",
        strip(AS.compose_prompt(KS.general_preamble(), birth + TURN_SEP + mine)) == mine)
-    # Renamed because it stopped being true. A straggler is not a stale name: `run_turn` would
-    # TypeError, inside a background run nobody is watching.
-    # The binding, not the name: `assemble_system_append` is still the honest name of the method
-    # that builds the append — what must be gone is anything PASSING a pointer into it.
+    # A straggler is not a stale name. `run_turn` would raise, so only prose can carry a name
+    # nothing checks.
     stragglers = sorted(p.relative_to(ROOT).as_posix()
                         for p in (ROOT / "superme_agent").rglob("*.py")
                         if re.search(r"system_append\s*=", p.read_text(encoding="utf-8")))
     ok("nothing hands the phase pointer to the system append", not stragglers, str(stragglers))
 
-    # The X-ray is how the owner checks any of this, so it has to record what was SENT. It once
-    # composed the body into a local and then recorded the raw trigger anyway — the page showed an
-    # empty session block for six phases while the real turns were carrying it correctly.
+    # The X-ray is how the owner checks any of this, so it has to record what was sent.
     from superme_agent.daemon.services.runs import capture as CAP
     recorded: dict = {}
     stub = SimpleNamespace(
@@ -255,7 +248,7 @@ def test_channels() -> None:
 def test_skills() -> None:
     print("skills — Background runs sections keep deltas, lose narration")
     deltas = {
-        # Assert the CONCEPT is still taught: pinning the exact heading made a copy edit read as a
+        # Assert the concept is still taught: pinning the exact heading made a copy edit read as a
         # lost rule.
         "plan": ("Decisions & clarifications", "verification"),
         "vet": ("record_verification", "file_vet_report"),
@@ -295,7 +288,7 @@ def test_reader() -> None:
 
 
 # ------------------------------------------------------------------ registry snapshot
-FIXTURE_DIR = Path("/tmp/superme-thread3-fixture")   # FIXED path — it appears inside rendered text
+FIXTURE_DIR = Path("/tmp/superme-thread3-fixture")  # Fixed path — it appears inside rendered text
 _FIXTURE_PATH = re.compile(re.escape(str(FIXTURE_DIR)) + r"[\w\\/.-]*")
 
 
@@ -337,7 +330,7 @@ def render_registry() -> dict[str, str]:
         "trigger.intake.plan": KS.intake_trigger("plan", "fix1", "Fixture"),
         "trigger.intake.triage": KS.intake_trigger("triage", "fix1", "Fixture"),
         "trigger.vet": KS.vet_trigger("fix1", "Fixture"),
-        # A FIXED path: the wording is the contract, and a baseline carrying this machine's
+        # A fixed path: the wording is the contract, and a baseline carrying this machine's
         # install location would fail everywhere else.
         "trigger.vet_env_note": KS.vet_env_note("/S/vet_env.sh"),
         "trigger.build_first": KS.build_first_trigger("fix1", "Fixture"),
@@ -460,8 +453,6 @@ def test_tool_channel() -> None:
     ok("both channels are populated", bool(names) and len(schemas) == len(names))
 
     # Claude Code sends the names and holds the schemas, so the two must not be the same text.
-    # Before this split the X-ray put `describe_specs` under the counted channel and overstated
-    # every per-request total by roughly 16x.
     name_chars = sum(len(f["text"]) for f in names)
     schema_chars = sum(len(f["text"]) for f in schemas)
     ok("names are far smaller than schemas", name_chars * 4 < schema_chars)
@@ -484,8 +475,7 @@ def test_plan_coverage() -> None:
     import tempfile
     from superme_agent.harness.tools.dev_tools.verification import _plan_coverage
 
-    # The REAL grammar, copied off a live plan.md: `t<n> —` task heads, `### <check-id>` blocks
-    # with a `covers:` line. The row-count assertion below fails loudly if that grammar moves.
+    # The real grammar, copied off a live plan.md.
     plan = """## Tasks
 - [ ] t1 — Suppress the placeholder under `--quiet`
       Gate the print behind `not getattr(args, "quiet", False)`.
@@ -516,7 +506,7 @@ env: none
         impl = _plan_coverage(d, "implementation")
         ok("an uncovered task is NAMED, not just counted", "t2" in impl)
         ok("the covered task is not reported as a gap", "t1 (" not in impl)
-        # The whole point: planning must learn this at 4d, one step BEFORE it files.
+        # The whole point: planning must learn this at 4d, one step before it files.
         ok("it says the report will repeat the same count", "report" in impl.lower())
 
         # A research plan declares no checks by design — a gap call-out there would be noise.
@@ -547,8 +537,7 @@ def test_library_without_a_plan() -> None:
         dev_root = Path(tmp) / "dev"
         item = dev_root / "work-items" / "aaaabbbbcccc"
         (item / "artifacts").mkdir(parents=True)
-        # A RESEARCH item: it never writes a plan, and `close` mounts this tool. 16 of the 24
-        # research items on the playground are in exactly this state.
+        # A research item never writes a plan, and close mounts this tool.
         (item / "item.md").write_text(
             '---\nid: aaaabbbbcccc\nkind: research\nphase: close\n---\nBody.\n',
             encoding="utf-8")
@@ -562,7 +551,7 @@ def test_library_without_a_plan() -> None:
         ok("no errno leaks out", "Errno" not in text and "No such file" not in text)
         ok("the library itself still comes back", "standing" in text and "available" in text)
 
-        # And the addendum still appears when there IS a plan, so the guard did not delete it.
+        # And the addendum still appears when there is a plan, so the guard did not delete it.
         (item / "artifacts" / "plan.md").write_text("## Tasks\n- [ ] t1 — a task\n", encoding="utf-8")
         res2 = asyncio.run(tool({"item_id": "aaaabbbbcccc"}))
         ok("a plan-bearing item still reads clean", "Errno" not in json.dumps(res2))
@@ -600,9 +589,8 @@ depth: checks
             (d / "artifacts" / "plan.md").write_text(PLAN.format(cmd=cmd), encoding="utf-8")
             return bool(_stray_run_blocks(d, WT))
 
-    # The shape that cost one live item a whole revise cycle: the command runs in the PRIMARY
-    # checkout, which sits on the anchor branch without this item's commits, so it grades code the
-    # item never wrote — and the dry run cannot tell, because that tree exists and answers.
+    # The command runs in the primary checkout, which sits on the anchor without this item's
+    # commits.
     ok("a `cd` to another checkout fires",
        fires("cd /Users/cooma/Developer/my_docs/test-playground && pytest -k quiet"))
     ok("an absolute path into another checkout fires",
@@ -616,8 +604,7 @@ depth: checks
     ok("a path INSIDE this worktree is clean", not fires(f"pytest {WT}/tests/test_ledger.py"))
     ok("a word merely containing 'cd' is clean", not fires("python -m mycd --check"))
 
-    # Windows shapes. The runner is the only thing that can answer whether this repo works there,
-    # and a guard that cannot see a native path is a guard that never fires.
+    # Windows shapes. A guard that cannot see a native path is a guard that never fires.
     WIN = r"C:\Users\me\.superme\worktrees\pg\aaaabbbbcccc"
 
     def wfires(cmd: str) -> bool:

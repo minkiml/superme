@@ -182,7 +182,7 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
         "duration_s": round((env_obj.get("duration_ms") or 0) / 1000, 1),
         "cost_usd": round(env_obj.get("total_cost_usd") or 0, 4),
     }
-    # Flag a soft/capped outcome so the caller can present the figure as a FLOOR, not a full run.
+    # Flag a soft/capped outcome so the caller can present the figure as a floor, not a full run.
     subtype = env_obj.get("subtype")
     if env_obj.get("is_error") or (subtype and subtype != "success"):
         metrics["capped"] = subtype or "error"

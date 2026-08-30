@@ -1,7 +1,7 @@
 """Artifact machinery — one template plus a deterministic scaffolder per kind.
 
-THE STANDARD: agent supplies content, code supplies form. Code owns frontmatter, section order,
-ids and timestamps; the agent fills `<fill:…>` slots. A self-check runs at the CONSUMING gate.
+The standard: agent supplies content, code supplies form. Code owns frontmatter, section order,
+ids and timestamps; the agent fills `<fill:…>` slots. A self-check runs at the consuming gate.
 """
 
 from .text import (log, FILL, atomic_write, split_sections, _section_filled, clip, _FENCE,

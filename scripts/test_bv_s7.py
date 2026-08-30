@@ -1,6 +1,6 @@
 """The one way back from review: `revise` to plan, and the revision grammar.
 
-Scope is per CHANGE, because one review carries several concerns and redesigning one part must
+Scope is per change, because one review carries several concerns and redesigning one part must
 not reset another part's progress.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s7
@@ -157,7 +157,7 @@ def test_plan_revision(tmp: Path) -> None:
                                                "content": "x"}]))))
     ok("nothing was written by any refusal", PR.plan_path(d).read_text(encoding="utf-8") == text)
 
-    # ONE revision, THREE scopes: redesigning one part must not reset the progress another part
+    # One revision, three scopes: redesigning one part must not reset the progress another part
     # earned.
     res = PR.revise(d, feedback=FEEDBACK, directive="handle the empty ledger, keep streaming",
                     still_in_force="nothing", concerns=["budget", "vet_failure"], spend=412330,
@@ -202,7 +202,7 @@ def test_plan_revision(tmp: Path) -> None:
     ok("...and the index sits above the blocks, so the history reads in order",
        heads.index("## Revision log") < len(heads) - 3)
 
-    # A task is a BLOCK: a line-wise remove would glue continuation lines onto the task above.
+    # A task is a block: a line-wise remove would glue continuation lines onto the task above.
     PR.revise(d, feedback="drop the dead task", directive="ignore t3", still_in_force="r1 holds",
               changes=one("targeted", [{"op": "remove_task", "task": "t3"}]))
     body = PR.plan_path(d).read_text(encoding="utf-8")
@@ -214,7 +214,7 @@ def test_plan_revision(tmp: Path) -> None:
        "- [x] t1 — read the ledger file" in tasks and "- [ ] t2 — print the total" in tasks)
     ok("the removal leaves no blank hole behind", "\n\n" not in tasks.strip())
 
-    # A redesign names what it voids: `_reset_checkboxes` is DELETED, so the ops ARE the state.
+    # A redesign names what it voids: `_reset_checkboxes` is deleted, so the ops are the state.
     PR.revise(d, feedback="the approach is wrong entirely", directive="stream it",
               still_in_force="r1's empty-ledger rule still holds",
               changes=[{"area": "approach", "scope": "redesign", "note": "stream instead",
@@ -235,7 +235,7 @@ def test_plan_revision(tmp: Path) -> None:
     ok("blocks accumulate — r1 is still there in full, and r3 says what still binds",
        PR.revisions(d) == ["r1", "r2", "r3"] and FEEDBACK in body
        and "- still in force: r1's empty-ledger rule still holds" in body)
-    # ...and not one revision later either: the high-water mark reads the ids HISTORY names, not
+    # ...and not one revision later either: the high-water mark reads the ids history names, not
     # the live list.
     PR.revise(d, feedback="one more task", directive="add the flag test", still_in_force="r3 holds",
               changes=one("targeted", [{"op": "add_task", "content": "the follow-up"}]))
@@ -253,7 +253,7 @@ def test_pre_grammar_plan_migrates(tmp: Path) -> None:
     print("a plan authored before the revision grammar migrates in place, losing nothing")
     from superme_agent.core import artifacts as A
     d = make_dev_root(tmp, "root-legacy", phase="plan") / "work-items" / "it7"
-    # The earlier shape: `## Tasks` mid-document, and ONE `## Revisions` section holding `### r1`.
+    # The earlier shape: `## Tasks` mid-document, and one `## Revisions` section holding `### r1`.
     p = PR.plan_path(d)
     p.write_text(p.read_text(encoding="utf-8").rstrip() + "\n\n## Revisions\n### r1 — 2026-07-29T19:21:02 — targeted\n"
                  "- feedback: the first round's words\n- Design (append): a point\n", encoding="utf-8")
@@ -378,7 +378,7 @@ def test_tool(tmp: Path) -> None:
         ok(f"empty `{field}` refused (the block would record a complaint, not an instruction)",
            "required" in out["content"][0]["text"])
 
-    # PHASE GUARD. Folding feedback into plan.md without leaving review changes the contract with
+    # Phase guard. Folding feedback into plan.md without leaving review changes the contract with
     # nothing re-running against it.
     review_root = make_dev_root(tmp, "root-phase", phase="review")
     at_review = _revise_plan(store=_Store(), context_id="c", dev_root=review_root,
@@ -444,8 +444,8 @@ def test_revise_outcome_routes(tmp: Path) -> None:
                     summary="the plan's commands point at the wrong tree")
         ok("a build's revise is left to the loop driver — one writer per transition", not fired)
 
-        # THE OWNER'S OWN ROUTE BACK. An interactive turn at review is `feature='chat'`, so a
-        # branch reading the FEATURE never fires.
+        # The owner'S own route back. An interactive turn at review is `feature='chat'`, so a
+        # branch reading the feature never fires.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "chat", "phase": "review"}
         RL.end_run(None, "c", "it7", 0, status="active", outcome="revise",
@@ -554,7 +554,7 @@ def test_gate_check(tmp: Path) -> None:
     # click.
     ok("...and an unrecorded revision never blocks Approve", not check(rounds)["blocking"])
 
-    # ONLY A KIND THAT VETS IS ASKED ABOUT ITS EVIDENCE: research has none, so the row blocked
+    # Only A kind that vets is asked about its evidence: research has none, so the row blocked
     # forever.
     def review_criteria(kind):
         it = {"id": "it7", "title": "S7", "kind": kind, "phase": "review",
@@ -578,7 +578,7 @@ def test_decision_bubbles() -> None:
        == "Needs your call on the contract.")
     ok("a headline is capped, never a wall", len(D._headline("x" * 500)) <= 241)
 
-    # The cap is enforced at the SOURCE too: a stated limit that nothing checks is a suggestion.
+    # The cap is enforced at the source too: a stated limit that nothing checks is a suggestion.
     from superme_agent.harness.tools.run_tools import _submit_gate_verdict
     sink: dict = {}
     verdict = _submit_gate_verdict(verdict_sink=sink)
@@ -615,7 +615,7 @@ def test_decision_bubbles() -> None:
     tl = src("web/frontend/src/features/chat/TimelineView.tsx")
     ok("decisions render as bubbles", "deputy.approve" in tl and "deputy.escalate" in tl
        and "deputyDecisions" in tl)
-    # A decision is an EVENT: it has a time and a subject, and the thread must honour both.
+    # A decision is an event: it has a time and a subject, and the thread must honour both.
     ok("...labelled with the gate they judged, not with wherever the item is now",
        "e.meta?.gate" in tl and "decisionBubbles" not in tl)
     ok("...and placed by time, not appended after the thread",
@@ -649,7 +649,7 @@ def test_routing_rule_is_per_turn() -> None:
 def test_hold_and_compaction_hooks() -> None:
     print("a chat turn never clears a hold · the compaction trigger covers background runs")
     ws = src("superme_agent/daemon/routers/ws.py")
-    # A parked item stays parked: flipping it to active would read IN PROGRESS and drop it from
+    # A parked item stays parked: flipping it to active would read in progress and drop it from
     # the attention feed.
     ok("a chat turn rests a PARKED item back at its hold, not at active",
        'if str((item or {}).get("status")) == "awaiting_human"' in ws
@@ -657,7 +657,7 @@ def test_hold_and_compaction_hooks() -> None:
     ok("...and `revise` — the one outcome that MOVES the item — still drops it",
        'rest_status = ("awaiting_human"' in ws)
 
-    # ...and the hold is read from the FACTS, so a row that lost one still renders honestly.
+    # ...and the hold is read from the facts, so a row that lost one still renders honestly.
 
     # The rule lives beside the run table, not in the FE: one screen once answered it three ways.
     attn = src("superme_agent/core/attention.py")
@@ -669,7 +669,7 @@ def test_hold_and_compaction_hooks() -> None:
     ok("...and build/vet are excluded — the loop chains them, mid-flight is not parked",
        "GATE_FOR_PHASE = {\"triage\"" in src("superme_agent/core/gate_briefs.py"))
     common = src("web/frontend/src/features/dev/common.tsx")
-    # Matched on the CONSTRUCTS, not the words: an absence assertion that trips over its own
+    # Matched on the constructs, not the words: an absence assertion that trips over its own
     # rationale teaches nothing.
     ok("the FE READS that verdict and re-derives nothing",
        "if (bucket === 'needs_you') return 'awaiting_human'" in common
@@ -680,7 +680,7 @@ def test_hold_and_compaction_hooks() -> None:
        "primaryStatus(it, buckets[it.id]) === want" in dash
        and "primaryStatus(w, buckets[w.id]) === 'awaiting_human'" in dash)
 
-    # Compaction triggers at run START and nowhere else; end-of-turn only releases the defer
+    # Compaction triggers at run start and nowhere else; end-of-turn only releases the defer
     # latch.
     runs = src("superme_agent/daemon/services/runs.py")
     ws = src("superme_agent/daemon/routers/ws.py")
@@ -750,7 +750,7 @@ def test_hold_and_compaction_hooks() -> None:
        < ws.index("chat_run_id = None if began_run else _spine.start_run("))
     ok("an unbound turn releases the defer latch, like a bound one",
        ws.count("compaction.note_turn_start(final_session)") == 2)
-    # The CLI's autocompact can fire INSIDE a turn, past the run-start check, so the net is a
+    # The CLI's autocompact can fire inside a turn, past the run-start check, so the net is a
     # logged event.
     ok("a general session's CLI-side autocompact is at least visible in the trail",
        "async def _pre_compact_general(" in ws and '"cli_initiated": True' in ws
@@ -760,14 +760,14 @@ def test_hold_and_compaction_hooks() -> None:
        and "_arts.read_session_memory(ctx.internal_root / ctx.mode, session_id" in runs_src)
     ok("...and the notice it feeds drops the item-artifacts fallback",
        "compacted_session_memory(ctx, turn_resume), has_artifacts=False" in ws)
-    # A SHORT session scores low by construction, and a manual run cannot loop.
+    # A short session scores low by construction, and a manual run cannot loop.
     ok("a manual compaction never accrues a strike or backs a session off",
        "elif not manual:\n            st.strikes += 1" in comp
        and "and not st.backed_off and not manual:" in comp
        and "pre_pct=None if force else pre, manual=force)" in comp)
     ok("...but an effective one still CLEARS strikes, whoever asked",
        'if verdict["effective"] and (bought_runway or manual):\n            st.strikes = 0' in comp)
-    # RUNWAY. `effective` answers whether it shrank, never whether that bought working room, and
+    # Runway. `effective` answers whether it shrank, never whether that bought working room, and
     # the two came apart.
     ok("an AUTO compaction that bought no runway counts against the back-off however well it shrank",
        "bought_runway = (st.turns_since_compact is None" in comp
@@ -775,13 +775,14 @@ def test_hold_and_compaction_hooks() -> None:
        and "st.turns_since_compact = 0   # this compaction is now the one runway is measured from" in comp)
     ok("...and real turns are what count it, off the same latch that releases the defer",
        "if st.turns_since_compact is not None:\n            st.turns_since_compact += 1" in comp)
-    # The trigger floor guards WORKING ROOM, not just the incompressible floor.
+    # The trigger floor guards working room, not just the incompressible floor.
     ok("the trigger guard refuses a value that leaves no room to work",
        "TRIGGER_MIN_PCT = 40" in comp and "if pct < TRIGGER_MIN_PCT:" in comp
        and "leaves no working room" in comp)
     ok("...and the FE reads that same minimum instead of deriving its own",
        "min={cfg.min_pct}" in src("web/frontend/src/features/config/sections/General.tsx"))
-    # `post_pct` came off the /compact Result and was ALWAYS None (a compact turn reports no usage).
+    # `post_pct` came off the /compact Result and was always None (a compact turn reports no
+    # usage).
     ok("post-compaction fill is DERIVED from measured tokens, not left None",
        "if post_pct is None and window and verdict.get(\"post_tokens\"):" in comp
        and "round(verdict[\"post_tokens\"] / window * 100)" in comp)
@@ -808,7 +809,7 @@ def test_hold_and_compaction_hooks() -> None:
     ok("...and the absent-artifact boilerplate is named and banned",
        "Do not spend lines saying which artifacts are absent" in s
        and "no line saying there is no work-item" in s)
-    # `plan.md` is the record for an ITEM; a general thread's decisions have homes of their own.
+    # `plan.md` is the record for an item; a general thread's decisions have homes of their own.
     flat = " ".join(s.split())   # the skill hard-wraps; match on prose, not line breaks
     ok("a decision with no home is routed, not just flagged",
        "Name what the anchor docs will owe" in flat and "project-prd / architecture / capabilities" in flat
@@ -864,7 +865,7 @@ def test_completion_card() -> None:
        "r.summary" in tl and "r.next" in tl and "r.questions" in tl)
     ok("cards interleave by time, so each one closes ITS run",
        "timed[ri].ts! <= b.ts" in tl and "...reports.map" in tl)
-    # The card IS the run's last word. Cut the trail at the call, never by timestamp.
+    # The card is the run's last word. Cut the trail at the call, never by timestamp.
     ok("nothing a background run says after its own ending reaches the channel",
        "report_completion')" in tl and "run.feature !== 'chat') ended = true" in tl
        and "if (ended) continue" in tl)
@@ -905,7 +906,7 @@ def test_contracts() -> None:
        and not any("route_review_feedback" in t for t in SAFE_TOOLS)
        and not hasattr(__import__("superme_agent.daemon.services.loop",
                                   fromlist=["x"]), "schedule_review_plan"))
-    # The review CONVERSATION's contract is the PREAMBLE's: an interactive turn never loads the
+    # The review conversation's contract is the preamble's: an interactive turn never loads the
     # phase skill, so words there change nothing.
     from superme_agent.core.kernel_speech import work_item_preamble
     convo = " ".join(work_item_preamble(
@@ -924,7 +925,7 @@ def test_contracts() -> None:
        "their instruction to change the plan, or your offer and their yes" in convo
        and "what they have NOT addressed" in convo
        and "silence on a point is not agreement" in convo)
-    # The SKILL is the review-ENTRY RUN's procedure: no git in it, and one skill for both kinds.
+    # The skill is the review-entry run's procedure: no git in it, and one skill for both kinds.
     skill = src("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md")
     flat = " ".join(skill.split())
     ok("the review skill is the ENTRY RUN: read → name the doc debt → write report-review.md → report",
@@ -941,10 +942,8 @@ def test_contracts() -> None:
        "Name it; never ask permission for it" in flat
        and "request_authorization" not in flat)
     ok("...and the naming carries a LABELLED example", "**Good example**" in flat)
-    # The owner's report is KIND-NEUTRAL: the questions a person asks before approving do not
-    # change with the workflow.
-    # The template is the skill's own package again, so the skill NAMES it: one kind-neutral
-    # shape, cited once, and no per-kind variant beside it.
+    # The owner's report is kind-neutral. The questions a person asks before approving do not
+    # change with the work.
     ok("...and one owner report template serves every kind, with no second review skill",
        "templates/report-review-template.md" in flat
        and Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/"
@@ -979,7 +978,7 @@ def test_contracts() -> None:
 
 
 def test_review_entry_run() -> None:
-    """Review HAS a runner, and both doors into review use the same one."""
+    """Review has a runner, and both doors into review use the same one."""
     print("slice 4a — the review-ENTRY run, one skill, both doors")
     from superme_agent.core import kernel_speech
     from superme_agent.core.vocab import token_taxonomy
@@ -1031,7 +1030,7 @@ def test_review_entry_run() -> None:
        and not (tmpl / "report-review-research-template.md").exists()
        and not Path("superme_agent/harness/plugins/superme-dev/skills/"
                     "research-report").exists())
-    # Four QUESTIONS, not a field sheet: what a machine parses lives in the agent-facing record.
+    # Four questions, not a field sheet: what a machine parses lives in the agent-facing record.
     owner = (tmpl / "report-review-template.md").read_text(encoding="utf-8")
     ok("the owner's report asks the four questions, and opens with the Summary line",
        "**Summary:**" in owner
@@ -1051,9 +1050,7 @@ def test_review_entry_run() -> None:
 
 
 def test_repo_knobs(tmp: Path) -> None:
-    """The repo's two git knobs, read live at every consumption point.
-
-    A configured anchor that does not exist RAISES rather than falling back."""
+    """The repo's two git knobs, read live at every consumption point."""
     import subprocess
     from superme_agent.core import git_layer as G
     from superme_agent.core.spine import (REVIEW_MODES, REVIEW_MODE_DEFAULT, RepoConfig,
@@ -1122,7 +1119,7 @@ def test_repo_knobs(tmp: Path) -> None:
         ok("a configured branch that is MISSING raises (never falls back)",
            "ghost" in str(e) and "will not fall back" in str(e))
 
-    # A READ probe reports a broken anchor instead of raising, so the tab shows a reason, not a
+    # A read probe reports a broken anchor instead of raising, so the tab shows a reason, not a
     # blank.
     h = G.worktree_health(repo, "rid", "itm", "main", trunk="ghost")
     ok("health reports a broken anchor rather than crashing the Git tab",
@@ -1173,15 +1170,13 @@ def test_repo_knobs(tmp: Path) -> None:
 
 
 def test_the_checkers_run_on_their_own_tier() -> None:
-    """Vet and the deputy do NOT inherit the model the work runs on.
-
-    A judge that rises with what it judges is not a second opinion."""
+    """Vet and the deputy do not inherit the model the work runs on."""
     print("vet and the deputy resolve on their own tier, never the project's")
     import tempfile
     from superme_agent.core.spine import SystemSpine
     with tempfile.TemporaryDirectory() as td:
         sp = SystemSpine(db_path=Path(td) / "s.db")
-        sp.set_model_override("r", "opus")          # the PROJECT is on opus
+        sp.set_model_override("r", "opus")  # the project is on opus
         sp.set_effort_override("r", "high")
         floor_m, floor_e = sp.effective_system_model(), sp.effective_system_effort()
         ok("the project's own tier still resolves through the project chain",
@@ -1204,7 +1199,7 @@ def test_the_checkers_run_on_their_own_tier() -> None:
            sp.role_model("r", "vet", item_model="sonnet") == "sonnet"
            and sp.deputy_params(item_model="haiku")[0] == "haiku")
 
-        # The runners must actually ASK for those chains — a resolver nothing calls is not a rule.
+        # The runners must actually ask for those chains — a resolver nothing calls is not a rule.
         loop_src = src("superme_agent/daemon/services/loop.py")
         dep_src = src("superme_agent/daemon/services/deputy.py")
         ok("the vet run resolves through the vet chain",
@@ -1218,9 +1213,7 @@ def test_the_checkers_run_on_their_own_tier() -> None:
 
 
 def test_prompt_xray_covers_every_speaker() -> None:
-    """The X-ray's two gaps: a speaker with no capture site, and a capture holding prose only.
-
-    Two runs on identical words look identical and behaved differently."""
+    """The X-ray's two gaps: a speaker with no capture site, and a capture nothing renders."""
     from superme_agent.daemon.services.runs import turn_surface
 
     dep = src("superme_agent/daemon/services/deputy.py")
@@ -1240,7 +1233,7 @@ def test_prompt_xray_covers_every_speaker() -> None:
     ok("a read-only turn says so rather than leaving it implied",
        turn_surface(read_only=True)["read_only"] is True)
 
-    # DERIVED, never restated: a capture that re-declares the surface can describe permissions the
+    # Derived, never restated: a capture that re-declares the surface can describe permissions the
     # turn never got.
     for name in ("loop", "runs", "deputy"):
         svc_src = src(f"superme_agent/daemon/services/{name}.py")
@@ -1250,12 +1243,12 @@ def test_prompt_xray_covers_every_speaker() -> None:
             ok(f"...sending the same dict it snapshotted, in {name}.py",
                "turn.stream(_agent" in svc_src and "**turn_kwargs)" in svc_src)
     prev = src("superme_agent/daemon/services/input_preview.py")
-    # The invariant is that the surface gets its OWN section, not which number it carries.
+    # The invariant is that the surface gets its own section, not which number it carries.
     ok("the inspector renders it as its own channel", "Turn surface" in prev)
     ok("...and OMITS the block for rows captured before it existed, rather than printing dashes",
        "if not surface:\n        return \"\"" in prev)
 
-    # A probe tears down at CLEARANCE: a clean close never rests at the gate, so it would leak.
+    # A probe tears down at clearance: a clean close never rests at the gate, so it would leak.
     clr = src("superme_agent/daemon/services/clearance.py")
     ok("a completed probe tears itself down at the item's terminal moment",
        "is_prompt_extraction(item)" in clr and "px.teardown(" in clr)
@@ -1268,7 +1261,7 @@ def test_prompt_xray_covers_every_speaker() -> None:
 
 
 def test_repo_activity_scope(tmp: Path) -> None:
-    """The Activity tab's ONE read: dev-native rows plus the item rows, in one order."""
+    """The Activity tab's one read: dev-native rows plus the item rows, in one order."""
     from superme_agent.core.dev_store import DevStore, REPO_MILESTONE_KINDS
 
     st = DevStore(tmp / "act.db")
@@ -1298,9 +1291,9 @@ def test_repo_activity_scope(tmp: Path) -> None:
 
 
 def test_branch_list(tmp: Path) -> None:
-    """`list_branches` — the anchor picker's option set.
+    """The anchor picker's option set.
 
-    The anchor REFUSES a branch that does not exist, so the picker must offer only real ones."""
+    The anchor refuses a branch that is gone."""
     import os
     import subprocess
     from superme_agent.core import git_layer as G
@@ -1328,9 +1321,7 @@ def test_branch_list(tmp: Path) -> None:
 
 
 def test_merge_act(tmp: Path) -> None:
-    """The merge act: squash into the anchor, and the freshness rule that owns it.
-
-    A squash is not an ancestor, so ancestry reads a merged item as unmerged."""
+    """The merge act: squash into the anchor, and the freshness rule that owns it."""
     import os
     import subprocess
     from superme_agent.core import git_layer as G
@@ -1352,7 +1343,7 @@ def test_merge_act(tmp: Path) -> None:
     for i in (1, 2, 3):                       # three per-task commits, the shape review reads
         (wt / f"f{i}.txt").write_text(str(i), encoding="utf-8")
         g("add", ".", cwd=wt)
-        # Task id in the TRAILER, never the subject; the gate a fresh worktree installs rejects
+        # Task id in the trailer, never the subject; the gate a fresh worktree installs rejects
         # the old way.
         g("commit", "-m", f"Add f{i}\n\nSuperMe-Task: t{i}", cwd=wt)
 
@@ -1396,7 +1387,7 @@ def test_merge_act(tmp: Path) -> None:
 
     # --- the commit message is kernel-assembled ---------------------------------------
     idir = tmp / "item-dir"
-    # The body comes off the AGENT-facing record: it outlives this workspace, and machines parse
+    # The body comes off the agent-facing record: it outlives this workspace, and machines parse
     # it.
     (idir / "artifacts").mkdir(parents=True)
     (idir / "artifacts" / "review.md").write_text(
@@ -1417,7 +1408,7 @@ def test_merge_act(tmp: Path) -> None:
        and "review" not in msg.split("SuperMe-")[0].lower())
     ok("a missing report still yields a valid subject",
        squash_message({"title": "No report"}, "itm", tmp / "nowhere").startswith("feat: No report"))
-    # The record is prose wrapped for READING, so taking only its first line ends the commit mid-
+    # The record is prose wrapped for reading, so taking only its first line ends the commit mid-
     # sentence.
     wrapped = tmp / "item-wrapped"
     (wrapped / "artifacts").mkdir(parents=True)
@@ -1441,7 +1432,7 @@ def test_merge_act(tmp: Path) -> None:
         return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
     g2("init", "-b", "main"); g2("config", "user.email", "t@t"); g2("config", "user.name", "t")
-    # Long enough that edits at each end merge CLEANLY: git is happy, the behaviour may not be.
+    # Long enough that edits at each end merge cleanly: git is happy, the behaviour may not be.
     lines = "\n".join(f"line {i}" for i in range(1, 21)) + "\n"
     (r2 / "mine.txt").write_text(lines, encoding="utf-8")
     (r2 / "theirs.txt").write_text("base\n", encoding="utf-8")
@@ -1492,10 +1483,7 @@ def test_merge_act(tmp: Path) -> None:
 
 
 def test_commit_contract(tmp: Path) -> None:
-    """The message is for the project, the trailers are for SuperMe.
-
-    A repository's readers have never heard of this workspace. The mechanical rules bind at the
-    tool."""
+    """The message is for the project, the trailers are for SuperMe."""
     import asyncio
     import subprocess
     from superme_agent.core import git_layer as G
@@ -1558,7 +1546,7 @@ def test_commit_contract(tmp: Path) -> None:
                          capture_output=True, text=True, encoding="utf-8")
     ok("git interpret-trailers reads them back", got.stdout.strip() == "SuperMe-Item: 4f2a1b9c0d3e")
 
-    # --- the kernel assembles from the DECLARATION ------------------------------------
+    # --- the kernel assembles from the declaration ------------------------------------
     idir = tmp / "commit-item"
     (idir / "artifacts").mkdir(parents=True)
     (idir / "artifacts" / "review.md").write_text(
@@ -1600,10 +1588,7 @@ def test_commit_contract(tmp: Path) -> None:
 
 
 def test_pr_gate_and_page(tmp: Path) -> None:
-    """The second gate, and the surface it exists for.
-
-    `strict` splits approval: the deputy's opens the PR, the owner's merges. The state is DERIVED,
-    so the merge closes the PR."""
+    """The second gate, and the surface it exists for."""
     import subprocess
     from superme_agent.core import git_layer as G, artifacts as A
     from superme_agent.daemon.services import git_ops, pr_view
@@ -1627,7 +1612,7 @@ def test_pr_gate_and_page(tmp: Path) -> None:
        gates_src.index("git_ops.open_pr(") < gates_src.index("review_merge_out = git_ops.review_merge("))
     ok("the throwaway probe is exempt (it must sail through every gate to be captured)",
        "is_prompt_extraction(item)" in gates_src.split("review_mode(ctx, spine)")[0][-400:])
-    # The INVARIANT, not the wording: pinning owner-editable copy makes an edit look like a
+    # The invariant, not the wording: pinning owner-editable copy makes an edit look like a
     # regression.
     import superme_agent.daemon.services.attention as ATT
     base = {"phase": "review", "status": "awaiting_human"}
@@ -1640,16 +1625,16 @@ def test_pr_gate_and_page(tmp: Path) -> None:
        ATT.classify_hold({**base, "git_pr_opened_at": "x", "git_merge_commit": "abc"},
                          [])["reason"] == plain["reason"])
 
-    # `strict` governs who ELSE may land a branch, never what the OWNER's approval does.
+    # `strict` governs who else may land a branch, never what the owner's approval does.
     modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
-    # The label comes from the SERVER, so the invariant is asserted where it is decided.
+    # The label comes from the server, so the invariant is asserted where it is decided.
     ok("the owner's gate button always says merge — never conditioned on review_mode",
        "a.label" in modal and "'Approve & open PR'" not in modal
        and "Approve & merge" not in modal)
     ok("the Git tab's landing line NAMES THE ACTOR (it is the deputy's approval that opens a PR)",
        "the deputy's approval only opens a PR; yours merges" in modal
        and "strict — approving opens a PR; you merge from the PR page" not in modal)
-    # Comments STRIPPED: this file quotes the wrong label, and a raw search would read that as the
+    # Comments stripped: this file quotes the wrong label, and a raw search would read that as the
     # bug.
     dd_src = src("superme_agent/daemon/services/drilldown.py")
     dd = "\n".join(l for l in dd_src.splitlines() if not l.lstrip().startswith("#"))
@@ -1687,8 +1672,8 @@ def test_pr_gate_and_page(tmp: Path) -> None:
     ok("the merge path does NOT clear it — the merge commit is what closes that PR",
        "close_pr" not in gates_src.split('freshness") == "park"', 1)[1])
 
-    # --- the commit contract the walkthrough depends on -------------------------
-    # The requirement sits IN the step that commits.
+    # --- the commit contract the walkthrough depends on ------------------------- The requirement
+    # sits in the step that commits.
     build_skill = " ".join(src("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md").split())
     step2 = build_skill.split("## Step 2", 1)[1].split("\n## ", 1)[0]
     ok("build's commit step names the trailer itself, not just a reference to read",
@@ -1712,7 +1697,7 @@ def test_pr_gate_and_page(tmp: Path) -> None:
     ok("...and the route it calls still refuses a clean sync rather than firing a pointless run",
        "nothing to resolve" in routes_src)
 
-    # The PR page is its OWN browser tab: a diff read in a leftover third is a diff nobody reads.
+    # The PR page is its own browser tab: a diff read in a leftover third is a diff nobody reads.
     prpage = src("web/frontend/src/features/dev/PrPage.tsx")
     entry = src("web/frontend/src/main.tsx")
     dash = src("web/frontend/src/features/dev/DevDashboard.tsx")
@@ -1816,9 +1801,7 @@ def test_pr_gate_and_page(tmp: Path) -> None:
 
 
 def test_commit_gate(tmp: Path) -> None:
-    """The commit contract, enforced by a hook rather than asked for in prose.
-
-    A refusal build cannot author parks the item."""
+    """The commit contract, enforced by a hook rather than asked for in prose."""
     import subprocess
     from superme_agent.core import git_layer as GL
     from superme_agent.core import permissions as P
@@ -1922,7 +1905,7 @@ def test_commit_gate(tmp: Path) -> None:
     loop_src = src("superme_agent/daemon/services/loop.py")
     ok("...and the ask rests the item where the owner sees it",
        'needs_user — the question is the run' in loop_src and "asking" in loop_src)
-    # The commit wall is the ONE state resting inside the loop: nothing landed, so review would
+    # The commit wall is the one state resting inside the loop: nothing landed, so review would
     # show an empty diff.
     ok("a stopped build turn holds at build as `error`, never advanced to review",
        'mark_item_error(ctx, context_id, item_id, reason, phase="build")' in loop_src
@@ -1935,9 +1918,7 @@ def test_commit_gate(tmp: Path) -> None:
 
 
 def test_build_loop_entry() -> None:
-    """Approving the plan gate is the instruction to build, so entering `build` opens the loop.
-
-    For every item: a hand-driven one otherwise has nothing to start it."""
+    """Approving the plan gate is the instruction to build."""
     print("B6 — the build⟷vet loop opens for every item, autopilot or not")
     from superme_agent.daemon.services import gates as G
     gates_src = src("superme_agent/daemon/services/gates.py")
@@ -1951,7 +1932,7 @@ def test_build_loop_entry() -> None:
     _ebl = gates_src.split("async def enter_build_loop")[1]
     _ebl = _ebl.split("\nasync def ")[0].split("\ndef ")[0]
     ok("enter_build_loop is not itself autopilot-gated", "is_autopilot" not in _ebl)
-    # What autopilot still gates: the deputy judging on the owner's behalf. That IS the
+    # What autopilot still gates: the deputy judging on the owner's behalf. That is the
     # delegation.
     ok("the review branch stays autopilot-gated (deputy judgment is the delegated act)",
        'elif nxt == "review" and autopiloted and not auto_started:' in gates_src)
@@ -1978,7 +1959,7 @@ def test_proof_rows(tmp: Path) -> None:
         # Planned but never run — the case the Task tab exists to show at the plan gate.
         "### alias-routes\n- traces: d-reporting\n- covers: t2\n- mode: command\n"
         "- scenario: curl /sum\n- expect: 302 to /stats\n", encoding="utf-8")
-    # The id is BOLDED because real reports write it that way; a tolerant parser hid the bug.
+    # The id is bolded because real reports write it that way; a tolerant parser hid the bug.
     (d / "artifacts" / "build-vet-1.md").write_text(
         "# Build⟷vet 1 — p\n\n## Built\n- **t1** (`web/stats.py`): added the CSV writer\n"
         "  and wired the download button\n- refreshed a stale doc stub\n\n"
@@ -2017,7 +1998,7 @@ def test_proof_rows(tmp: Path) -> None:
     ok("...plus the per-cycle history, so ✗→✓ is renderable",
        [h["passed"] for h in by["t1"]["verified"][0]["history"]] == [False, True])
     ok("a task nothing touched renders empty rather than vanishing", by["t2"]["built"] == [])
-    # The exam is decided at PLAN, so a check the loop has not reached is a row, marked not-yet-
+    # The exam is decided at plan, so a check the loop has not reached is a row, marked not-yet-
     # run.
     ok("a planned check is a row before anything runs",
        [v["check"] for v in by["t2"]["verified"]] == ["alias-routes"]
@@ -2032,7 +2013,7 @@ def test_proof_rows(tmp: Path) -> None:
     ok("...and so does a check that names no task",
        [v["check"] for v in by[""]["verified"]] == ["suite-green"])
 
-    # The tags are TAUGHT, never required: a hard issue would retroactively fail every in-flight
+    # The tags are taught, never required: a hard issue would retroactively fail every in-flight
     # plan.
     vp = A.parse_vet_plan((d / "artifacts" / "plan.md").read_text(encoding="utf-8"))
     ok("a check with no `covers:` is still structurally valid",
@@ -2047,15 +2028,16 @@ def test_proof_rows(tmp: Path) -> None:
 
 
 def test_drilldown_payload(tmp: Path) -> None:
-    """The ONE server-computed payload. What is asserted is the part the FE must never re-derive:
-    every control's `active` + `reason`, and the card that answers "what is needed from me"."""
+    """The one server-computed payload.
+
+    What is asserted is the part the FE must never recompute."""
     print("drilldown payload — server-computed activation + the WHAT-YOU-NEED-TO-DO card")
     from superme_agent.daemon.services import drilldown as DD
     dev_root = make_dev_root(tmp, "root-dd", phase="review")
     item_dir = dev_root / "work-items" / "it7"
     (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
     (item_dir / "reports").mkdir(parents=True, exist_ok=True)
-    # A CLEAN review gate needs COMPLETE artifacts: readiness is judged where there is recourse.
+    # A clean review gate needs complete artifacts: readiness is judged where there is recourse.
     from superme_agent.core import artifacts as _A
 
     def _artifact(kind: str, **sections: str) -> None:
@@ -2082,15 +2064,15 @@ def test_drilldown_payload(tmp: Path) -> None:
 
     d = payload()
     acts = {a["id"]: a for a in d["actions"]}
-    # THREE bar controls plus the two git ones: primary, Drop, Re-run.
+    # Three bar controls plus the two git ones: primary, Drop, Re-run.
     ok("the bar's closed set is primary(approve|run|resume) + drop + rerun, plus the git one",
        set(acts) == {"approve", "run", "resume", "drop", "rerun", "pr"})
-    # Exactly ONE control lands the work. A second one, gated differently, is also the bypass.
+    # Exactly one control lands the work. A second one, gated differently, is also the bypass.
     ok("no second control performs the gate's act", "merge" not in acts)
     ok("...and every bar control is homed in the action bar",
        {a for a, v in acts.items() if v["home"] == "actions"}
        == {"approve", "run", "resume", "drop", "rerun"})
-    # Resume is ALWAYS rendered, greyed with its reason: a control that explains itself teaches,
+    # Resume is always rendered, greyed with its reason: a control that explains itself teaches,
     # an absent one hides.
     ok("Resume is rendered even on an item that never stopped", "resume" in acts)
     ok("...inactive, saying when it WOULD appear",
@@ -2102,7 +2084,7 @@ def test_drilldown_payload(tmp: Path) -> None:
     ok("Drop is always live while the item lives ", acts["drop"]["active"])
     ok("the owner's review label says MERGE — the act is the same in both modes",
        acts["approve"]["label"] == "Approve & merge")
-    # `review_mode` is a REPO fact and arrives on its own; an absent mode must claim NEITHER.
+    # `review_mode` is a repo fact and arrives on its own; an absent mode must claim neither.
     def approve_reason(**over):
         return next(a for a in payload(**over)["actions"] if a["id"] == "approve")["reason"]
 
@@ -2113,11 +2095,11 @@ def test_drilldown_payload(tmp: Path) -> None:
     ok("depth `none` means nothing is owed, so Approve is live",
        acts["approve"]["active"] and d["blocked_by"] == [])
     ok("...and the reports list names only what exists", d["reports"] == ["review"])
-    # Nothing open: the card names the ONE control that performs the act.
+    # Nothing open: the card names the one control that performs the act.
     ok("a clean review gate's card points at Approve itself",
        d["attention"] and d["attention"]["click"] == "approve")
 
-    # A pending authorization greys Approve, and the REASON is the check's own detail.
+    # A pending authorization greys Approve, and the reason is the check's own detail.
     from superme_agent.core import artifacts as A
     A.record_authorization(item_dir, what="drop a stale doc", why="it lies",
                             doc="architecture.md", scope="roadmap-scope", check="c1")
@@ -2133,15 +2115,15 @@ def test_drilldown_payload(tmp: Path) -> None:
     ok("a run in flight greys Approve and says why",
        not next(a for a in d["actions"] if a["id"] == "approve")["active"])
 
-    # The card: hidden when nothing needs the owner, and naming BOTH the act and the one control.
+    # The card: hidden when nothing needs the owner, and naming both the act and the one control.
     ok("an active item needs nothing → no card at all", payload(status="active")["attention"] is None)
     card = payload()["attention"]
     ok("a parked item gets a card with why · do · basis",
        card and card["why"] and card["do"] and card["basis"])
-    # With the must-resolve set open there is no ONE control to press, so the card says so.
+    # With the must-resolve set open there is no one control to press, so the card says so.
     ok("...and with something must-resolve open it says resolve, naming no button",
        "Resolve what" in card["do"] and card["click"] == "")
-    # REFERENCE points at a SURFACE, and carries the COUNT standing between owner and button.
+    # Reference points at a surface, and carries the count standing between owner and button.
     ok("...and REFERENCE points at the open checks by count",
        any(str(len(payload()["blocked_by"])) in b for b in card["basis"]))
     ok("...and it points at the phase's report too",
@@ -2155,7 +2137,7 @@ def test_drilldown_payload(tmp: Path) -> None:
        and grill["attention"]["click"] == "chat"
        and grill["attention"]["questions"][0]["question"].startswith("TTL"))
 
-    # What the item IS, not a restatement of the header. A row with nothing in it never renders.
+    # What the item is, not a restatement of the header. A row with nothing in it never renders.
     about = payload()["about"]
     ok("About is an ordered list of rows, not a map",
        isinstance(about, list) and all(set(r) == {"label", "value"} for r in about))
@@ -2171,7 +2153,7 @@ def test_drilldown_payload(tmp: Path) -> None:
         "# Review User-facing Report\n\n**Summary:** it holds, and the flag is consistent now.\n", encoding="utf-8")
     ok("...and once the report exists the card gets its one line",
        payload()["now"]["summary"] == "it holds, and the flag is consistent now.")
-    # The FE must not re-decide this. Comments STRIPPED: the header names the field it replaced.
+    # The FE must not re-decide this. Comments stripped: the header names the field it replaced.
     modal_src = src("web/frontend/src/features/dev/WorkItemModal.tsx")
     modal_code = "\n".join(l for l in modal_src.splitlines()
                            if not l.lstrip().startswith(("//", "*", "/*")))
@@ -2181,7 +2163,7 @@ def test_drilldown_payload(tmp: Path) -> None:
     ok("...and the gate brief's pane is GONE with it",
        "GateBriefPane" not in modal_code and "report_html" not in modal_code
        and "srcDoc" not in modal_code)
-    # Each proof leads with what the check PROVES. Older plans predate the field, so the fallback
+    # Each proof leads with what the check proves. Older plans predate the field, so the fallback
     # chain has to survive.
     ok("a proof row leads with the check's own sentence",
        "v.proves || v.expect || v.check" in modal_code)

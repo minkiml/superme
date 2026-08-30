@@ -17,7 +17,7 @@ def _plan_coverage(item_dir, kind: str | None) -> str:
     from ....core.artifacts import proof_rows
     from ....core.vocab.kind_profiles import get_profile
     if get_profile(kind).kind == "research":
-        return ""   # a research plan declares no checks BY DESIGN — a gap call-out would be noise
+        return ""  # a research plan declares no checks by design — a gap call-out would be noise
     rows = [r for r in proof_rows(item_dir) if r["task"]]
     if not rows:
         return ""

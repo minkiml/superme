@@ -1,6 +1,6 @@
 """Permission policy — part of the agent's portable harness.
 
-Decides which tool calls auto-run and which need human approval. The approval MECHANISM lives in
+Decides which tool calls auto-run and which need human approval. The approval mechanism lives in
 `core/permissions.py`; the policy travels with the agent.
 """
 
@@ -56,7 +56,7 @@ SAFE_TOOLS = {
     "mcp__dev__file_plan_report",
     "mcp__dev__file_phase_report",
     "mcp__dev__write_checkpoint",
-    # Merges trunk INTO the item's own worktree only; conflicts abort and report.
+    # Merges trunk into the item's own worktree only; conflicts abort and report.
     "mcp__dev__sync_from_anchor_branch",
     # Writes the anchor docs through validated ops, at close, after the merge.
     "mcp__dev__apply_knowledge_edits",

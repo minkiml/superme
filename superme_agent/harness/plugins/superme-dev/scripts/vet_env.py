@@ -230,8 +230,8 @@ def main(argv: list[str]) -> None:
     wt = Path(top).resolve()
     main_checkout = Path(common).resolve().parent
 
-    # EVERY verb refuses, not just `start`: `stop` sweeps by cwd, and the host daemon's cwd IS
-    # the main checkout.
+    # Every verb refuses, not just `start`: `stop` sweeps by cwd, and the host daemon's cwd is the
+    # main checkout.
     if wt == main_checkout:
         die("this is the main checkout, not an item worktree. The server running here is the "
             "HOST — every run is its child, so starting, stopping or sweeping it would kill the "

@@ -44,7 +44,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
                      faults: int = 0, fault_reason: str = "", lens_gaps: list[dict] | None = None,
                      audit_gaps: list[dict] | None = None) -> dict:
     """The driver's decision function, pure so every branch is unit-testable."""
-    # The driver continues ONLY an active item; a human-set stop never auto-resumes.
+    # The driver continues only an active item; a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
     if item.get("done_at") or status != "active":
         return {"action": "none", "status": status, "record": False,
@@ -54,7 +54,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
         return {"action": "none", "status": status, "record": False,
                 "reason": f"item left vet (phase={item.get('phase')}) — loop yields"}
     ev = str(evidence.get("status") or "unverified")
-    # The run STOPPED, and the retry ladder already waited it out, so the item stops where it
+    # The run stopped, and the retry ladder already waited it out, so the item stops where it
     # died.
     if turn_error:
         return {"action": "error", "status": "error", "record": True, "exit": "error",
@@ -137,7 +137,7 @@ def decide_after_build(item: dict, *, outcome: str | None, turn_error: bool) -> 
         return {"stopping": True, "klass": "infra"}
     if outcome == "needs_user":
         return {"stopping": True, "klass": "needs_user"}
-    # Build concluded the PLAN is wrong and cannot fix that itself, so the item routes to plan.
+    # Build concluded the plan is wrong and cannot fix that itself, so the item routes to plan.
     if outcome == "revise":
         return {"stopping": True, "klass": "revise"}
     return {"stopping": False, "klass": "advance"}
@@ -165,7 +165,7 @@ def _loop_ctx(ctx, item: dict):
 
 
 def _resolve_run_params(context_id: str, item: dict) -> tuple[str, str]:
-    """(model, effort) for a BUILD run, through the same precedence every other item run resolves:
+    """(model, effort) for a build run, through the same precedence every other item run resolves:
     item → repo → system."""
     return (_spine.effective_model(context_id, item_model=item.get("model")),
             _spine.effective_effort(context_id, item_effort=item.get("effort")))
@@ -277,7 +277,7 @@ def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     model, effort = _resolve_vet_params(context_id, item)
     if not begin_run(ctx, context_id, item_id, "vet", model, phase="vet"):
         return False, "a run is already in progress for this item"
-    # A paged item the owner just re-launched is active again (the launch IS the answer);
+    # A paged item the owner just re-launched is active again (the launch is the answer);
     # begin_run rested it already.
     run_tasks.track(asyncio.create_task(_run_background_vet(ctx, context_id, item_id, model, effort)))
     return True, "vet"
@@ -293,11 +293,11 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         end_run(ctx, context_id, item_id, None, "awaiting_human", None, outcome="blocked")
         return
     wt_ctx, wt, item_dir, _ = lc
-    # ONE definition of what this run may write to: the turn, the sandbox and the X-ray all read
+    # One definition of what this run may write to: the turn, the sandbox and the X-ray all read
     # this list.
     boundary = [wt, item_dir]
     title = item.get("title") or item_id
-    # Name the checks the build DEFERRED, so the vetter skips a wall only the owner can clear.
+    # Name the checks the build deferred, so the vetter skips a wall only the owner can clear.
     deferred = [str(a.get("check")) for a in _arts.pending_authorizations(item_dir) if a.get("check")]
     # The kernel runs what it can first, so the vetter meets those results as facts, not work.
     try:
@@ -327,14 +327,14 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     final_session = None
     run_started = time.time()
     live = LiveTokens()
-    sink: dict = {}   # report_completion lands here (run_tools) — recorded; the DRIVER decides
+    sink: dict = {}  # report_completion lands here (run_tools) — recorded; the driver decides
     # The turn carries its own retry ladder, so a vet that never got off the ground is waited out
     # here.
     turn = ResilientTurn("vet", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "vet"))
-    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    # Built once, then both snapshotted and sent — see `runs.surface_from_turn`.
     turn_kwargs = dict(
-        resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
+        resume=None,  # vet forgets — fresh eyes, prior reports are data
         model=model, effort=effort,
         approve=deny_all,                # background: nothing outside the boundary runs
         extra_mcp_servers={**dev_mcp(ctx, wt, ctx.cwd, item_id, scope="vet"),
@@ -342,7 +342,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         preamble=kernel_speech.work_item_preamble(item_id, item, str(item_dir),
                                                   interactive=False, shell_cwd=wt_ctx.cwd),
         item_bound=True,                 # one item is the subject — no board-wide in-progress list
-        write_boundary=boundary,         # boundary Bash autonomy (running checks IS the job)
+        write_boundary=boundary,  # boundary Bash autonomy (running checks is the job)
         sandbox_writes=boundary,         # …and the kernel holds that same boundary (sandbox.py)
         deny_write_tools=VET_READONLY_NUDGE,  # …but file-write tools die outright
     )
@@ -373,10 +373,10 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, item_id=item_id)
     turn_error = turn.fault.failed
-    # Trail honesty only: the driver below decides off the LEDGER, never off vet's own payload.
+    # Trail honesty only: the driver below decides off the ledger, never off vet's own payload.
     await ensure_completion(ctx, context_id, item_id, sink, skill="vet",
                             session_id=final_session, model=model, effort=effort)
-    # ---- THE DRIVER: decide off the ledger, close the run, apply, fire the next hop.
+    # ---- the driver: decide off the ledger, close the run, apply, fire the next hop.
     item = _dev.read_work_item(dev_root, item_id) or {}
     evidence = _arts.evidence_status(item_dir, wt)
     # The plan judged this item to have no observable surface, so the empty ledger is right.
@@ -392,7 +392,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # belong in the signature.
     fingerprint = _arts.convergence_fingerprint(
         item_dir, extra=[g["text"] for g in gaps] + [f"validation:{a['command']}" for a in audit_gaps])
-    # Both breakers read THIS generation only: a revision refreshes the budget, so pre-redesign
+    # Both breakers read this generation only: a revision refreshes the budget, so pre-redesign
     # history stops counting.
     revision = _plan_revision.current_revision(item_dir)
     attempts = _arts.read_cycle_outcomes(item_dir, revision=revision)
@@ -405,7 +405,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
                          spent=spent, budget=budget, turn_error=turn_error,
                          faults=_fault_retries(context_id, item_id, cycle),
                          fault_reason=turn.fault.reason, lens_gaps=gaps, audit_gaps=audit_gaps)
-    # CAS flips happen BEFORE the run row closes so the next hop's row stamps the new phase.
+    # CAS flips happen before the run row closes so the next hop's row stamps the new phase.
     moved = True
     if d["action"] == "review":
         moved = _cas_phase(dev_root, item_id, "vet", "review")
@@ -447,7 +447,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
         log.exception("auto-checkpoint after vet failed")
-    # Fire the next hop AFTER the run row is closed (the per-item run-lock frees above).
+    # Fire the next hop after the run row is closed (the per-item run-lock frees above).
     if d["action"] == "review":
         # This hop CAS-flips the phase itself and never calls `advance_item`, so the entry run
         # fires here too.
@@ -501,7 +501,7 @@ def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
 
 
 def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """Start one background build cycle: the build session, which REMEMBERS, fixes what the latest
+    """Start one background build cycle: the build session, which remembers, fixes what the latest
     vet report describes."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
@@ -536,7 +536,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     boundary = [wt, item_dir]    # one definition — turn, sandbox, and X-ray capture all read it
     prev_build = (item.get("sessions") or {}).get("build")
     title = item.get("title") or item_id
-    # Build REMEMBERS, so the skill is invoked once; a compaction can cut it out of context.
+    # Build remembers, so the skill is invoked once; a compaction can cut it out of context.
     compacted = compacted_checkpoint(ctx, item, prev_build)
     if trigger is None:
         report = _arts.latest_cycle_report(item_dir)  # capped handoff
@@ -572,18 +572,18 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     run_started = time.time()
     live = LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
-    # An upstream API error arrives as assistant TEXT, so without a classifier the turn looks like
+    # An upstream API error arrives as assistant text, so without a classifier the turn looks like
     # a clean no-op.
     turn = ResilientTurn("build", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "build"))
-    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    # Built once, then both snapshotted and sent — see `runs.surface_from_turn`.
     turn_kwargs = dict(
-        resume=prev_build,               # build REMEMBERS — same thread every cycle
+        resume=prev_build,  # build remembers — same thread every cycle
         model=model, effort=effort,
         approve=deny_all,
         extra_mcp_servers={**dev_mcp(ctx, wt, ctx.cwd, item_id, scope="build"),
                            "run": make_run_report_server(sink)},
-        # Build REMEMBERS, so it is the other thread compaction can hit.
+        # Build remembers, so it is the other thread compaction can hit.
         preamble=kernel_speech.work_item_preamble(
             item_id, item, str(item_dir), interactive=False,
             compacted_checkpoint=compacted, shell_cwd=wt_ctx.cwd),
@@ -629,7 +629,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         reports = _arts.cycle_reports(item_dir)
         cycle = reports[-1]["cycle"] if reports else 0
         if d["klass"] == "infra":
-            # The build run STOPPED after the retry ladder was spent; the item stops at `build`.
+            # The build run stopped after the retry ladder was spent; the item stops at `build`.
             reason = turn.fault.reason or "the build run stopped before it could report"
             mark_item_error(ctx, context_id, item_id, reason, phase="build")
             end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
@@ -639,7 +639,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
                            "reason": f"the build run stopped — {reason}; the item is held at build "
                                      "for you to resume or re-run"})
             return
-        # A `revise` is neither a wall nor a hold — only a state the OWNER must clear rests at
+        # A `revise` is neither a wall nor a hold — only a state the owner must clear rests at
         # `awaiting_human`.
         still_ours = d["klass"] not in ("moved", "revise")
         rest = ("active" if d["klass"] == "revise" else
@@ -713,7 +713,7 @@ def grant_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
 
 def deny_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                        by: str) -> tuple[bool, str]:
-    """Record a DENIAL: the owner accepts the gap. The blocked check is waived and the item stays at
+    """Record a denial: the owner accepts the gap. The blocked check is waived and the item stays at
     review."""
     dev_root = ctx.internal_root / "dev"
     item_dir = dev_root / "work-items" / item_id

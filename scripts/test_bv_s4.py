@@ -1,7 +1,7 @@
 """Vet session mechanics, and the refusals that make a verdict mean something.
 
 A verdict without evidence, or contradicting the ledger, is refused. Vet's file-writes are dead
-outright, while its shell keeps autonomy to RUN checks.
+outright, while its shell keeps autonomy to run checks.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s4
 """
@@ -78,8 +78,7 @@ def make_repo(tmp: Path) -> Path:
 
 
 def _lenses(d) -> None:
-    """The three standing lenses, owed on every cycle before the report will write
-    Not what this suite is testing — just the bar it now has to clear."""
+    """The three standing lenses, owed on every cycle before the report will write."""
     for ln in A.STANDING_LENSES:
         A.record_lens(d, lens=ln, probed="read the diff through this lens")
 

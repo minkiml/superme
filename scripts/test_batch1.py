@@ -1,9 +1,4 @@
 """Surface fixes: the phase guard, the run's session, the Activity column, the board's reflow.
-
-A plan run fired outside the plan phase burned tokens on a self-blocking skill, so the rule has
-one owner and it is server-side.
-
-Run: PYTHONPATH=. python -m scripts.test_batch1
 """
 
 import asyncio
@@ -50,7 +45,7 @@ def test_plan_phase_guard(tmp: Path) -> None:
 
     try:
         WI.contexts = SimpleNamespace(resolve=lambda cid, mode: ctx)
-        # begin_run must NEVER be reached outside `plan` (the whole point: refuse pre-token-burn).
+        # begin_run must never be reached outside `plan` (the whole point: refuse pre-token-burn).
         orig_begin = WI.begin_run
         WI.begin_run = lambda *a, **k: (began.__setitem__("n", began["n"] + 1) or 1)
 
@@ -58,7 +53,7 @@ def test_plan_phase_guard(tmp: Path) -> None:
             return asyncio.run(WI.dev_work_item_run(
                 iid, WI.PlanBody(context_id="t"), dev=stub_dev, spine=stub_spine))
 
-        # One door, same invariant: the route must refuse BEFORE opening a run, so a refusal costs
+        # One door, same invariant: the route must refuse before opening a run, so a refusal costs
         # zero tokens.
         import superme_agent.daemon.services.resume as RES
         real_resolve = RES.contexts.resolve
@@ -101,14 +96,14 @@ def test_run_session_id(tmp: Path) -> None:
     print("run.session_id — item runs join the session_fate path")
     spine = SystemSpine(db_path=tmp / "s.db",
                         system_config=tmp / "sys.yaml", repos_config=tmp / "repos.yaml")
-    # An item run finished WITHOUT a session_id stays NULL (the old bug) — unlabelable.
+    # An item run finished without a session_id stays null (the old bug) — unlabelable.
     rid0 = spine.start_item_run("r", item_id="itemA", feature="chat", phase="triage")
     assert rid0
     spine.finish_item_run("r", "itemA", fallback_tokens=10)
     row0 = spine.run_history("r")[0]
     ok("finish without session_id leaves it NULL", row0.get("session_id") is None, str(row0))
 
-    # WITH a session_id, the row carries it — and a session delete now labels it.
+    # With a session_id, the row carries it — and a session delete now labels it.
     spine.record_session("sess-xyz", cwd=str(tmp), surface="headless")
     rid = spine.start_item_run("r", item_id="itemB", feature="build", phase="build")
     assert rid
@@ -137,7 +132,7 @@ def test_fe_surfaces() -> None:
     act = _norm(src("web/frontend/src/features/activity/GlobalActivity.tsx"))
     ok("Activity renders run.phase", "{r.phase &&" in act and "r.phase}" in act)
     panels = _norm(src("web/frontend/src/features/dev/panels.tsx"))
-    # The board REFLOWS rather than scrolling sideways, which hides content behind an unadvertised
+    # The board reflows rather than scrolling sideways, which hides content behind an unadvertised
     # gesture.
     ok("board reflows its lanes rather than growing a sideways scrollbar",
        "minmax(0, 1fr)" in panels and "boardW >= 716 ? 4 : boardW >= 552 ? 2 : 1" in panels
@@ -145,7 +140,7 @@ def test_fe_surfaces() -> None:
     ok("card title truncates to one line (4-row card spec)",
        'className="truncate text-[12.5px] leading-snug text-fg"' in panels)
 
-    # A pane that cannot fit its content must SHED, and what it sheds must stay reachable.
+    # A pane that cannot fit its content must shed, and what it sheds must stay reachable.
     layout = _norm(src("web/frontend/src/lib/layout.ts"))
     ok("a container is measured by a CALLBACK ref, so one that mounts late is still measured",
        "export function useContainerWidth<T extends HTMLElement>(): [(node: T | null) => void, number]" in layout)
@@ -169,15 +164,15 @@ def test_fe_surfaces() -> None:
     ok("a setting's control wraps below its label rather than crushing it",
        "flex flex-wrap items-center gap-x-4 gap-y-2" in ctl and "min-w-[9rem] flex-1" in ctl)
 
-    # Narrow surfaces SIMPLIFY: words go, the figure and the actionable mark stay. Every dropped
+    # Narrow surfaces simplify: words go, the figure and the actionable mark stay. Every dropped
     # word survives elsewhere.
     ok("a card in a narrow lane says fill, spend and age, and drops the labels + the model",
        "const tightCards = laneW > 0 && laneW < 215" in panels
        and "{!tight && (model || ctx != null) && (" in panels
        and "{!tight && (researchKindLabel(it.research_kind) || workKindLabel(it.kind)) && (" in panels)
     dash = _norm(src("web/frontend/src/features/dev/DevDashboard.tsx"))
-    # The INVARIANT, not the classes: the title always renders, the reason only when there is
-    # room, and the tooltip carries both either way. Styling moved and this went red on it.
+    # The invariant, not the classes. The title always renders, the reason only when there is
+    # room.
     ok("the attention feed keeps WHICH item and drops the reason when there is no room",
        "{!tight && <span" in dash and "{r.reason}</span>}" in dash
        and "{r.title}" in dash and "title={`${r.title} \u2014 ${r.reason}`}" in dash)
@@ -185,10 +180,10 @@ def test_fe_surfaces() -> None:
        "const down = w > 0 && w < 460" in dash and "<Connector label=\"push\" down={down} />" in dash)
     ok("the work-item stat row becomes five marks + five numbers on one line",
        "const chip = (Icon: LucideIcon" in dash and "if (tight) {" in dash)
-    # A picker shows the value IN FORCE: an inherit row beside it is one answer with two labels.
+    # A picker shows the value in force: an inherit row beside it is one answer with two labels.
     pset = _norm(src("web/frontend/src/features/config/sections/ProjectSettings.tsx"))
     gen = _norm(src("web/frontend/src/features/config/sections/General.tsx"))
-    # Asserted on the option LISTS, since a check its own rationale trips reads as a bug.
+    # Asserted on the option lists, since a check its own rationale trips reads as a bug.
     ok("no config picker offers a Default row beside the value it defaults to",
        all("const MODEL_OPTS = MODEL_CATALOG.map" in src
            and "const EFFORT_OPTS = EFFORT_CATALOG.map" in src

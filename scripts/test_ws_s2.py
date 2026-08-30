@@ -30,7 +30,7 @@ def fill_all(path: Path, filler=lambda m: "real content") -> None:
     path.write_text(A.FILL.sub("filled — real content here", text), encoding="utf-8")
 
 
-# Crude filler fails the hard gate BY DESIGN, so a plan fixture carries a valid verification plan.
+# Crude filler fails the hard gate by design, so a plan fixture carries a valid verification plan.
 VET_OK = """depth: checks
 reason: contained change — inspection suffices
 env: none
@@ -87,7 +87,7 @@ def make_repo(tmp: Path) -> Path:
 
 def test_template_section_spec() -> None:
     print("template → section spec (fill detection spans the whole section)")
-    # A fill slot WRAPPED across lines matches neither, so per-line detection made a required
+    # A fill slot wrapped across lines matches neither, so per-line detection made a required
     # section read as optional.
     A._template_cache["__wrapped_probe"] = (
         "# T\n\n## One\n<fill:a slot that wraps\nacross two lines>\n\n## Two\nprose, no slot\n")
@@ -95,7 +95,7 @@ def test_template_section_spec() -> None:
        A.template_section_spec("__wrapped_probe") == [("One", True), ("Two", False)],
        str(A.template_section_spec("__wrapped_probe")))
     A._template_cache.pop("__wrapped_probe")
-    # A comment-only section must merely EXIST, never be filled by the authoring agent.
+    # A comment-only section must merely exist, never be filled by the authoring agent.
     ok("research work-segment record derives four filled sections",
        A.template_section_spec("investigation")
        == [("Questions", True), ("Evidence", True), ("Dead ends", True), ("Open threads", True)])
@@ -119,7 +119,7 @@ def test_scaffold_and_check(item: Path) -> None:
         d = item / f"case-{kind}-{item_kind or 'x'}"
         r = A.scaffold(d, kind, title="T", item_kind=item_kind, item_id="i1")
         assert r["created"], kind
-        # Fresh scaffold must FAIL the check (unfilled slots) — except none? all have fills.
+        # Fresh scaffold must fail the check (unfilled slots) — except none? all have fills.
         issues = A.self_check(d, kind, item_kind=item_kind)
         assert issues, f"{kind}: fresh scaffold should not pass ({issues})"
         p = Path(r["path"])
@@ -225,8 +225,7 @@ def test_tasks_and_status(tmp: Path, repo: Path) -> None:
 
 
 def test_pr_task_notes(tmp: Path) -> None:
-    """The PR page's per-task notes: build's line parsed out of the cycle report, joined to the
-    plan's requirement and the ledger's verdicts, with the LATEST cycle winning."""
+    """The PR page's per-task notes, parsed out of the cycle report."""
     print("PR review notes, per task")
     dev = DevKnowledgeService()
     root = tmp / "pg-root"
@@ -298,8 +297,7 @@ def test_pr_task_notes(tmp: Path) -> None:
 
 
 def test_owner_edit(tmp: Path) -> None:
-    """The owner's hand-edit of an INTENT artifact: refused for record kinds, validated before it
-    writes, and stamped so a later reader knows whose words these are."""
+    """The owner's hand-edit of an intent artifact, refused for record kinds."""
     print("owner edit of brief/plan")
     dev = DevKnowledgeService()
     root = tmp / "oe-root"
@@ -319,7 +317,7 @@ def test_owner_edit(tmp: Path) -> None:
     except ValueError:
         ok("a record kind is refused", True)
 
-    # A save that breaks the contract writes NOTHING — the same issues the gate would raise.
+    # A save that breaks the contract writes nothing — the same issues the gate would raise.
     before = p.read_text(encoding="utf-8")
     issues = A.owner_edit(item_dir, "plan", "# Plan\n\njust prose, no sections\n",
                           item_kind="implementation")
@@ -337,7 +335,7 @@ def test_owner_edit(tmp: Path) -> None:
     ok("an untouched artifact carries no stamp",
        A.owner_edited_at((item_dir / "artifacts" / "review.md").read_text(encoding="utf-8")) is None)
 
-    # Re-editing REPLACES the stamp rather than stacking a second one.
+    # Re-editing replaces the stamp rather than stacking a second one.
     A.owner_edit(item_dir, "plan", after, item_kind="implementation")
     ok("re-editing keeps exactly one stamp",
        p.read_text(encoding="utf-8").count("edited_by_owner:") == 1)
@@ -351,9 +349,7 @@ def test_owner_edit(tmp: Path) -> None:
 
 
 def test_carry_owner_input(tmp: Path) -> None:
-    """The owner's words reach every phase MECHANICALLY.
-
-    Each intake phase runs in its own session, so this block carries the durable copy."""
+    """The owner's words reach every phase mechanically."""
     print("owner input carried into every phase")
     dev = DevKnowledgeService()
     root = tmp / "carry-root"
@@ -388,10 +384,7 @@ def test_carry_owner_input(tmp: Path) -> None:
 
 
 def test_report_read_hygiene(tmp: Path) -> None:
-    """A report's READ path drops what the author should have deleted.
-
-    The first report the owner read carried two blocks that survived their own template's
-    instruction."""
+    """A report's read path drops what the author should have deleted."""
     print("report read hygiene")
     item = tmp / "hygiene"
     (item / "reports").mkdir(parents=True)
@@ -420,7 +413,7 @@ def test_tool_registration() -> None:
     names = {t.name for t in ITEM_DEV_TOOLS}
     ok("S2 tools registered",
        names == {"scaffold_artifact", "record_verification", "write_checkpoint",
-                 "record_validation",   # build's self-check as DATA, so vet can audit the claim
+                 "record_validation",  # build's self-check as data, so vet can audit the claim
                  "check_plan_commands",      # …and plan's smoke test of the `run:` blocks it just wrote
                 "sync_from_anchor_branch",                   # joined later
                 "apply_knowledge_edits",    # joined later
@@ -443,10 +436,7 @@ def test_tool_registration() -> None:
 
 
 def test_review_record(tmp: Path) -> None:
-    """Review's own agent-facing record.
-
-    It was the one phase with no agent doc, so its OWNER report accumulated fields only machines
-    read."""
+    """Review's own agent-facing record."""
     print("review record — the phase's agent-facing doc")
     from superme_agent.core.vocab import kind_profiles as _kp
     from superme_agent.daemon.services import git_ops as _go

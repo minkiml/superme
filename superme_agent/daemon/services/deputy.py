@@ -1,6 +1,6 @@
 """The deputy — the agent that judges autopilot gates on the owner's behalf.
 
-A surfaceless one-shot run, minted fresh per gate and a PEER of the phase sessions: the judged must
+A surfaceless one-shot run, minted fresh per gate and a peer of the phase sessions: the judged must
 not own its judge.
 """
 
@@ -97,7 +97,7 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
         gate = deputy_gate_for(item)
         if gate is None:
             return
-        # Inside a live review loop the persistent REVIEW deputy owns the item, so a fresh plan
+        # Inside a live review loop the persistent review deputy owns the item, so a fresh plan
         # deputy must not compete.
         if gate == "plan" and _in_review_loop(dev_root / "work-items" / item_id):
             from . import gates as gate_svc
@@ -160,8 +160,8 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                                    all_items=all_items, events=events, **counters)
     dep_root = deputy_core.deputy_root(ctx)  # mandate lives in the harness cell, not knowledge
     mandate = deputy_core.read_mandate(dep_root)
-    digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)
-    # On a loop re-entry, feed a lean delta so the deputy re-judges the DELTA. A POINTER, never
+    digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls at this gate (continuity)
+    # On a loop re-entry, feed a lean delta so the deputy re-judges the delta. A pointer, never
     # ground truth.
     delta = _build_delta(item_dir, gate, state.get("numbers") or {})
     signal = _success_signal(dev_root, item) if gate == "review" else None
@@ -175,7 +175,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
             auth_block = kernel_speech.render_authorizations_block(pending)
         # The vet's actual per-check verdicts — the brief alone carries only an entry count.
         verdicts = _arts.verdict_rows(item_dir)
-    # The deputy reads the OWNER's document for this phase, not a re-flattening of it.
+    # The deputy reads the owner's document for this phase, not a re-flattening of it.
     prompt = kernel_speech.deputy_brief_block(
         item_id, str(item.get("title") or item_id), gate,
         state=state, report=_arts.report_text(item_dir, str(state.get("phase") or "")),
@@ -191,9 +191,9 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     sink: dict = {}   # the verdict tool (run_tools) lands the verdict here
     turn = ResilientTurn("deputy judge", item_id=item_id,
                          notify=retry_notice(context_id, item_id, gate))
-    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    # Built once, then both snapshotted and sent — see `runs.surface_from_turn`.
     turn_kwargs = dict(
-        resume=None,  # fresh per gate — the deputy FORGETS
+        resume=None,  # fresh per gate — the deputy forgets
         model=model, effort=effort,
         approve=deny_all,                  # read-only judge: no writes, no shell side effects
         sandbox_writes=[],                 # …and sandboxed anyway: cwd only, no network

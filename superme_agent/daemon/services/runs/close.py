@@ -91,9 +91,9 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn("auto-close", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "close"))
-    # Built once, then both SNAPSHOTTED and SENT — see `surface_from_turn`.
+    # Built once, then both snapshotted and sent — see `surface_from_turn`.
     turn_kwargs = dict(
-        resume=session_id,   # this PHASE's own thread; None the first time it is entered
+        resume=session_id,  # this phase's own thread; None the first time it is entered
         model=model,
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(item_dir, deny_all),
@@ -104,7 +104,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         preamble=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     )
-    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
+    # Prompt inspector "A" — throwaway probes only: capture matches the real send exactly.
     if _autopilot.is_prompt_extraction(item):
         capture_run_input(context_id, item_id, ctx=ctx, preamble=focus, prompt=prompt,
                           phase="close",

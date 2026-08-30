@@ -5,19 +5,19 @@ import re
 from ..vocab import kind_profiles as _kp
 from .text import FILL
 
-# The template FILE is the single source. A `<fill:…>` slot must be FILLED; a comment-only section
-# must merely EXIST.
+# The template file is the single source. A `<fill:…>` slot must be filled; a comment-only section
+# must merely exist.
 
 _TEMPLATE_HOMES = {
     "brief":         ("triage", "brief-template.md"),
     "plan":          ("plan", "plan-template.md"),
     "plan-research": ("plan", "plan-research-template.md"),
     "build-vet":     ("build", "build-vet-template.md"),
-    # The UNJUDGED shape — a research item whose family nobody named. Adding a section here would
+    # The unjudged shape — a research item whose family nobody named. Adding a section here would
     # retro-fail correct records.
     "investigation": ("investigate", "investigation-template.md"),
     # One shape per family: each answers a different question, so each owes a different record.
-    # Read from the REGISTRY.
+    # Read from the registry.
     **{_kp.family_template(f.slug): ("investigate", f"{_kp.family_template(f.slug)}-template.md")
        for f in _kp.RESEARCH_FAMILIES},
     "review":          ("review", "review-template.md"),

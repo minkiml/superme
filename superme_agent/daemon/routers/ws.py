@@ -198,7 +198,7 @@ async def ws_agent(ws: WebSocket) -> None:
             await inbox.put(None)
 
     approved_sigs: set[str] = set()  # remember approval within a session — once the owner
-    #                                   OK's a KIND of call, later calls of that kind don't re-ask.
+    # OK's a kind of call, later calls of that kind don't re-ask.
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
         """The daemon's ApproveFn: round-trip the decision to this client, once per kind."""
@@ -246,13 +246,13 @@ async def ws_agent(ws: WebSocket) -> None:
             if ctx.mode != "dev":
                 work_item_id = None
 
-            # Onboarding is a repo STATE, not a launched action, so nothing in the payload decides
+            # Onboarding is a repo state, not a launched action, so nothing in the payload decides
             # it.
             unestablished = bool(
                 ctx.mode == "dev" and ctx.internal_root
                 and not _dev.project_established(ctx.internal_root / "dev")
             )
-            # Session KIND is server-authoritative like `item_id`: a resumed session's stored kind
+            # Session kind is server-authoritative like `item_id`: a resumed session's stored kind
             # wins, and only birth infers.
             if ctx.mode != "dev":
                 session_kind, subject_run_id = "general", None
@@ -287,7 +287,7 @@ async def ws_agent(ws: WebSocket) -> None:
             model = _spine.effective_model(ctx.id, per_call=msg.model, item_model=item.get("model"))
             effort = _spine.effective_effort(ctx.id, per_call=msg.effort, item_effort=item.get("effort"))
 
-            # An item runs ONE agent at a time; refuse rather than let two agents write the same
+            # An item runs one agent at a time; refuse rather than let two agents write the same
             # files concurrently.
             if work_item_id and _spine.is_item_running(ctx.id, work_item_id):
                 await send(result_frame(
@@ -295,7 +295,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     "finish before sending another turn."))
                 continue
 
-            # A turn bound to a work-item IS that item being worked: open a run and sandbox writes
+            # A turn bound to a work-item is that item being worked: open a run and sandbox writes
             # to its folder.
             turn_approve = approve
             began_run = False
@@ -306,8 +306,8 @@ async def ws_agent(ws: WebSocket) -> None:
             # A diagnosis birth turn prepends the subject-run trace here, so it caches instead of
             # re-sending every turn.
             agent_prompt = prompt
-            # `gate_general` hard-gates mutating tools for any non-work-item dev session — general,
-            # onboarding, AND diagnosis (a diagnosis session is strictly read-only).
+            # `gate_general` hard-gates mutating tools for any non-work-item dev session —
+            # general, onboarding, and diagnosis (a diagnosis session is strictly read-only).
             gate_general = ctx.mode == "dev" and not work_item_id
             # The one write a general or onboarding session may make. Diagnosis gets no write
             # exception at all.
@@ -315,7 +315,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 (ctx.internal_root / "dev" / "general")
                 if gate_general and session_kind != "diagnosis" and ctx.internal_root else None
             )
-            # The LIVE state, deliberately distinct from `session_kind`: a session born during
+            # The live state, deliberately distinct from `session_kind`: a session born during
             # onboarding stops behaving as one.
             is_onboarding = bool(gate_general and session_kind != "diagnosis" and unestablished)
             # Build and vet run at the worktree; intake stays at the repo, because the CLI stores
@@ -326,11 +326,11 @@ async def ws_agent(ws: WebSocket) -> None:
             item_worktree = None
             turn_resume = _live_resume(msg.resume, resumed)
             session_slot = None   # the bound turn's storage slot (triage|plan|build|vet|review|close)
-            session_role = None   # its ROLE (intake|build|vet) — NOT the slot; only build and vet share a name
+            session_role = None  # its role (intake|build|vet) — NOT the slot; only build and vet share a name
             handoff_mark = None   # step-6 watermark to persist at Result (a promotion rode this turn)
-            main_repo_dir = ctx.cwd   # the REAL repo root, captured before any worktree swap
+            main_repo_dir = ctx.cwd  # the real repo root, captured before any worktree swap
             grill_parked = False  # plan's grill: this bound chat is a Q&A round
-            grill_sink: dict = {}  # this turn's report_completion payload (grill round OR a review `revise`)
+            grill_sink: dict = {}  # this turn's report_completion payload (grill round or a review `revise`)
             compact_verdict: dict | None = None  # set when a compaction fired at this run's start
             if work_item_id and item.get("git_worktree"):
                 wt = Path(str(item["git_worktree"]))
@@ -351,10 +351,10 @@ async def ws_agent(ws: WebSocket) -> None:
                     adopt=lambda sid, r: _dev.set_work_item_session(
                         ctx.internal_root / "dev", work_item_id, sid, slot=r),
                 )
-                # The slot says WHERE a turn runs, never which role it plays. No slot is named
+                # The slot says where a turn runs, never which role it plays. No slot is named
                 # `intake`.
                 session_role = kind_profiles.session_role(str(item.get("phase") or "triage"))
-                # The bound turn runs in the CURRENT role's slot; a resume naming another role's
+                # The bound turn runs in the current role's slot; a resume naming another role's
                 # thread is redirected.
                 turn_resume = slot_sid
                 resumed = _spine.get_session(slot_sid) if slot_sid else None
@@ -364,7 +364,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     write_boundary = [item_worktree, item_dir]
                     if kind_profiles.role_uses_worktree(session_role, item.get("kind")):
                         ctx = replace(ctx, cwd=item_worktree)
-                # Vet is READ-ONLY on files; the shell stays, because running checks IS the job.
+                # Vet is read-only on files; the shell stays, because running checks is the job.
                 if session_role == "vet":
                     deny_write_tools = VET_READONLY_NUDGE
                 # The item is parked on plan's questions, so mount the report pen — until it re-
@@ -432,7 +432,7 @@ async def ws_agent(ws: WebSocket) -> None:
             if session_append and not work_item_id:
                 session_append += compaction_notice(
                     compacted_session_memory(ctx, turn_resume), has_artifacts=False)
-            # A manual `/compact` IS the whole turn; sending the literal string on would compact a
+            # A manual `/compact` Is the whole turn; sending the literal string on would compact a
             # session compacted seconds ago.
             if manual_compact:
                 await send(result_frame(_compact_reply(compact_verdict)))
@@ -497,12 +497,12 @@ async def ws_agent(ws: WebSocket) -> None:
             turn_mcp = (
                 {"dev": make_dev_mcp_server(
                     _dev_store, ctx.id, spine=_spine, scope=tool_scope,
-                    # With a live worktree `ctx.cwd` IS the worktree, so evidence fingerprints the
+                    # With a live worktree `ctx.cwd` Is the worktree, so evidence fingerprints the
                     # validated tree.
                     dev_root=(ctx.internal_root / "dev") if ctx.internal_root else None,
                     repo_dir=ctx.cwd,
                     main_repo_dir=main_repo_dir,
-                    # The item write-tools operate ONLY this session's bound item; a general
+                    # The item write-tools operate only this session's bound item; a general
                     # session gets none.
                     bound_item_id=work_item_id,
                     # An auto-pushed child gets the same first kick the owner's push gives it.
@@ -569,7 +569,7 @@ async def ws_agent(ws: WebSocket) -> None:
                                 # Reverse stamp at a work-item session's birth: from here the
                                 # daemon reads this, not the client payload.
                                 _spine.stamp_session_item(ev.session_id, work_item_id)
-                                # …and its role. Legacy item sessions keep kind NULL, which
+                                # …and its role. Legacy item sessions keep kind null, which
                                 # derives to `work_item` downstream.
                                 _spine.stamp_session_kind(ev.session_id, session_role or "intake")
                                 # The promotion block landed in this turn's transcript, so advance
@@ -610,7 +610,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     # Reported elsewhere it is just logged.
                     if outcome == "revise" and str((item or {}).get("phase")) != "review":
                         outcome = None
-                    # `revise` is the one outcome that MOVES the item, so it alone drops the hold.
+                    # `revise` is the one outcome that moves the item, so it alone drops the hold.
                     rest_status = ("awaiting_human"
                                    if str((item or {}).get("status")) == "awaiting_human"
                                    and outcome != "revise" else "active")
@@ -660,7 +660,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 log.exception("session-end auto-checkpoint failed")
 
 
-# Send-only, and it sends TOPICS, never values — the panel refetches over HTTP, so every number
+# Send-only, and it sends topics, never values — the panel refetches over HTTP, so every number
 # keeps one source.
 
 
@@ -674,7 +674,7 @@ async def ws_dashboard(ws: WebSocket) -> None:
         while True:
             await ws.send_json(await q.get())
 
-    # The hello IS the contract: its arrival tells the browser push is live, so it can slow its
+    # The hello is the contract: its arrival tells the browser push is live, so it can slow its
     # polling.
     await ws.send_json(DashboardHelloFrame(coalesce_ms=dashboard_stream.COALESCE_MS).model_dump())
     task = asyncio.create_task(pump())

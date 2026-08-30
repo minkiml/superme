@@ -65,7 +65,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     if repo_dir != ctx.cwd:
         ctx = replace(ctx, cwd=repo_dir)
         item = _dev.read_work_item(dev_root, item_id) or item   # re-read: the git record moved
-    # The phase this run IS, not `skill` — `itemize` is a research item's closing run.
+    # The phase this run is, not `skill` — `itemize` is a research item's closing run.
     run_phase = str(item.get("phase") or "triage")
     # Resuming this phase's own thread continues where it left off; a first entry has no slot, so
     # the CLI mints.
@@ -105,9 +105,9 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn(f"background {skill}", item_id=item_id,
                          notify=retry_notice(context_id, item_id, skill))
-    # Built once, then both SNAPSHOTTED and SENT — see `surface_from_turn`.
+    # Built once, then both snapshotted and sent — see `surface_from_turn`.
     turn_kwargs = dict(
-        resume=prev_session,   # this PHASE's own thread; None the first time it is entered
+        resume=prev_session,  # this phase's own thread; None the first time it is entered
         model=model,
         effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
         approve=scoped_writes_approve(item_dir, deny_all),
