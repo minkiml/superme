@@ -10,6 +10,10 @@ Covers the skill file and every file packaged alongside it.
   this, check that. Not a description of a role, not a briefing on the system, not a policy
   document.
 
+- **Keep descriptions short.** Write clear, direct sentences for each process.
+
+- **Define the goal first.** Tell the agent the final objective before listing the individual steps/process.
+
 - **Instruct; do not explain the system.** How the harness fires the run, what a gate counts, what
   the SDK does on spawn — none of it changes what the agent does next. Test: if the sentence would
   still be true with the agent removed from the picture, it is not instruction.
@@ -32,6 +36,13 @@ Covers the skill file and every file packaged alongside it.
 
   Everything below `SKILL.md` is optional to be referenced/utilized by the main `SKILL.md`. Add one only where it makes the skill better; do not
   over-engineer with them.
+
+- **Use conditional logic.** For example, add "if/then" rules so the agent knows how to handle unexpected changes.
+
+- **Using steps are not always good or beneficial.** While having Skill instruction with clear step 
+can help sequential tasks, working with manageable pieces so the agent does not get confused, and 
+for consistency, it could break creativity and working in dynamic environments and process. 
+See below `## Different writing style` section. Appropriate use is necessary only when writing giving "steps" buys clear benefits and necessity. 
 
 - **Number the steps in execution order**, and if the skill ships a copy-this checklist, make it
   match the steps 1:1. Ordering mistakes become visible instead of arguable — a step that writes to
@@ -90,6 +101,34 @@ Covers the skill file and every file packaged alongside it.
 | `hooks` | object | No | Lifecycle hooks scoped to this skill |
 | `paths` | string/list | No | Glob patterns that limit when the skill auto-activates. Accepts a comma-separated string or YAML list — Claude loads the skill only when working with matching files |
 | `shell` | string | No | Shell for `` !`command` `` blocks — `bash` (default) or `powershell`. Requires `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` |
+
+## Different writing style 
+While having Skill instruction with clear step can help sequential tasks, working with manageable pieces so the agent does not get confused, and for consistency (use steps to make sure the agent never skips an important check or rule.), it could break creativity (e.g., do not use strict steps for writing, brainstorming, or open problem-solving where the agent needs freedom.) and working in dynamic environments and process (e.g., Dynamic environments: Do not use rigid steps if the agent must constantly adapt to changing data or user choices.)
+
+### Steps would be not desirable if skill process requires
+1. Multi-Turn Conversations
+- Why steps fail: Users do not talk in straight lines. They change their minds, skip ahead, or ask clarifying questions.
+- The breakdown: If Step 2 is "Ask for user's email" and Step 3 is "Ask for user's phone number," but the user provides both upfront, a rigid agent might still ask for the phone number anyway because its programming dictates it must execute Step 3.
+- A solution: Use state-based rules instead of steps (e.g., "Ensure you have gathered X, Y, and Z before proceeding, in whichever order the user provides them").
+
+2. Multi-Tool Environments
+- Why steps fail: When an agent has access to multiple APIs or search tools, it needs to decide what tool to use based on the live data it receives.
+- The breakdown: Forcing a step like "Step 1: Search Google. Step 2: Use Python tool" fails if the initial search reveals that no calculation is needed. The agent wastes tokens or fails the task.
+- A solution: Provide capability guidelines rather than sequence rules (e.g., "Use the Python tool whenever the user's request requires exact math or counting").
+
+3. Handling Errors and Edge Cases
+- Why steps fail: Linear steps assume a perfect world where every API call works and every user input is valid.
+- The breakdown: If "Step 4: Fetch account balance" returns a system error, a linear agent has no clear path forward and might crash or loop infinitely.
+- A solution: Use conditional objectives (e.g., "Attempt to fetch the balance. If the system is down, politely inform the user and offer to check historical data instead").
+
+4. Subjective and Creative Tasks
+- Why steps fail: Brainstorming, drafting emails, or analyzing sentiment cannot be reduced to a mechanical checklist.
+- The breakdown: A step like "Step 1: Write an introduction. Step 2: Write three body paragraphs" restricts the AI from writing a punchy, one-sentence email response when that is actually what the user needs.
+- A solution: Focus on constraints and quality criteria (e.g., "Keep the tone professional, ensure the summary is under 150 words, and highlight the main action item").
+
+### Summary Checklist
+- Good to use steps for: if skills are about or require System configurations, data migrations, strict compliance checks, and math formulas.
+- Avoid steps for: If skills are about or require mid-term interaction, discovery/research tasks, creative writing, and complex tool routing.
 
 ## Optimize the frontmatter for discoverability
 

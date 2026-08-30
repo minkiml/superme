@@ -99,9 +99,10 @@ six months.
   unresolved question or a doc gap you could not settle is `research`.
 
 **Tone and style when writing to user-facing report**
-- Plain, easy language. Fewer words wins.
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
-- Omit a prose field rather than filling it with "none" — an absent block reads better.
+- Omit a field rather than filling it with "none" — an absent block reads better.
 
 ## Reporting the run
 

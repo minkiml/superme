@@ -187,8 +187,11 @@ body to `file_phase_report`. It owns the path and refuses a report with an unfil
 never write the file yourself. Then bank a `write_checkpoint`: which questions are answered, which
 are open, where to pick up.
 
-Write it plainly, in fewer words than feel natural. Never restate the item's kind, deliverable or
-id. Omit a field rather than filling it with "none".
+**Tone and style when writing to user-facing report**
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Omit a field rather than filling it with "none" — an absent block reads better.
 
 ## 8 · Report the run
 

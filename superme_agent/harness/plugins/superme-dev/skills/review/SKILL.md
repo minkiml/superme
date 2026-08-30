@@ -39,14 +39,13 @@ honest when they aren't.
   failure a plan-only reading cannot see. Implementation items only: a research item concluded
   nothing into the code.
 
-Numbers come from their source, never an estimate: the diff shape from one
-`git -C <worktree> diff --stat <base>...HEAD` — the worktree path and `<base>` are both in your
-`## Current focus` block — and check results from the cycles' `## Verification`.
+Numbers come from their source, never an estimate: the diff shape from
+`read_item_diff(item_id)`, and check results from the cycles' `## Verification`.
 
-**Name the worktree in the command; never `cd` into it.** Your shell starts in the repo root, and
-`cd` is not a read-only verb, so `cd <worktree> && git diff` is refused whole. A bare `git diff`
-runs and answers about the wrong tree, which is worse than being refused. `git -C <worktree> …`
-is the form that works.
+**`read_item_diff` is how you read the code — every diff, commit list and file count.** Your shell
+starts in the repo root, which cannot have this item's branch checked out, so a git command you run
+yourself describes a different tree and says so nowhere. Pass `path` to read one file or directory
+in full.
 
 ## Step 2 — Name what the anchor docs will owe
 
@@ -207,9 +206,10 @@ same four questions.
   section on a first review.
 
 **Tone and style when writing to user-facing report**
-- Plain, easy language. Fewer words wins.
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
-- Omit a prose field rather than filling it with "none" — an absent block reads better.
+- Omit a field rather than filling it with "none" — an absent block reads better.
 
 ## Reporting the run
 

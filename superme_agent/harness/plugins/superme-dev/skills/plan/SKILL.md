@@ -199,10 +199,11 @@ needed — this cycle routes through vet to record them"*, and its reader learne
 feature they were about to approve. If a revision genuinely changed nothing, the report is the same
 report.
 
-**Tone and style when writing user-facing report**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
+**Tone and style when writing to user-facing report**
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
-- Omit a prose field rather than filling it with "none" — an absent block reads better.
+- Omit a field rather than filling it with "none" — an absent block reads better.
 ## Reporting the run
 
 `report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase,

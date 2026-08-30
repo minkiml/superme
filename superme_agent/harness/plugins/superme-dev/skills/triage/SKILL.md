@@ -133,8 +133,8 @@ is the OWNER's — they accept or re-shape what you decided; the kernel and the 
   paragraph and the labels render mid-sentence.
 
 **Tone and style when writing to user-facing report**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
-- Keep the report short, clear, and to the point.
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
 - This is where the item is explained, not where it is defended.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Prefer a table to a paragraph whenever the content is pairs or a list of comparable things.

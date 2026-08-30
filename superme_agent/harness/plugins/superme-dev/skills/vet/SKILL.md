@@ -120,12 +120,14 @@ you are not being second-guessed, you are being spared the job of restating the 
 would make your independent pass and build's own self-report read as the same list — which is
 precisely what makes an independent pass worth running. Write what is now TRUE, not what you ran.
 
-The call is refused while any plan check has no entry, a standing lens has no read this cycle, or a
-failing check has no diagnosis. Then state the verdicts in one line each and stop — never start
+The call is refused while any plan check has no entry, a standing lens has no read this cycle, a
+failing check has no diagnosis, or `looked_at` runs its lenses together as a paragraph instead of
+one bullet each opening with its lens name. Then state the verdicts in one line each and stop — never start
 fixing, never address the builder directly.
 
 **Tone and style when writing to user-facing report**
-- Plain, easy language. Fewer words wins.
+- Bullets, not paragraphs. One fact per bullet, each under 20 words.
+- They are coming back cold to decide something. Give the decision, not the derivation.
 - **A code name belongs here only if the owner types it or sees it.** A flag like `--json` yes; a
   function, a variable, a file path, an exit code, a check id, no. Where you would reach for one,
   say what it does instead. This is the rule these reports break most.
