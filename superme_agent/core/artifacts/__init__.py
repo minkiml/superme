@@ -44,7 +44,7 @@ from .ledger import (BY_MACHINE, BY_AGENT, KIND_VERDICT, KIND_DIAGNOSIS, KIND_LE
                      note_no_verification, evidence_status)
 from .reports import (_space_labels, _DEAD_VALUES, _dead_label, _live_body, _drop_dead_blocks,
                       changed_since, report_text, _LABEL_VALUE, label_values, report_summary,
-                      triage_facts, report_issues, _OWNER_DECISION, owner_decision, proposed_work,
+                      triage_facts, report_issues, report_body_issues, _OWNER_DECISION, owner_decision, proposed_work,
                       delivered_line)
 from .owner_input import (FROM_YOU, _OWNER_BLOCKS, _OWNER_BULLET, _owner_blocks, _owner_slots,
                           owner_input, _CARRY_CAP, _DECISIONS, carry_owner_input,

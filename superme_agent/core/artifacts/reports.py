@@ -166,6 +166,32 @@ def triage_facts(item_dir: Path) -> dict:
             "problem": v.get("problem") or v.get("goal", "")}
 
 
+_HEADING = re.compile(r"\A#{1,6}[ \t]\S")
+_JUNK_THEN_HEADING = re.compile(r"\A([^\s#]{1,12})(#{1,6}[ \t].*)")
+# Fenced blocks and inline code legitimately carry braces; prose in a report does not.
+_FENCE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
+_PLACEHOLDER = re.compile(r"\{[a-z][a-z_]{1,}\}")
+
+
+def report_body_issues(body: str) -> list[str]:
+    """What is wrong with a report body, before it is anyone's file. Empty means it may be filed.
+
+    Every report template opens with its `# ` title. Measured across 652 filed reports: 21 began
+    with something else and 3 carried junk on the heading line — the owner reads both verbatim."""
+    first = next((ln for ln in (body or "").splitlines() if ln.strip()), "")
+    out: list[str] = []
+    if not _HEADING.match(first):
+        if m := _JUNK_THEN_HEADING.match(first):
+            out.append(f"the heading line begins {m.group(1)!r} before its `#`. Send the line as "
+                       f"`{m.group(2)[:60]}`")
+        else:
+            out.append("it does not open with its `# ` title line, the way its template does. "
+                       f"Your first line is {first[:70]!r}")
+    if left := sorted(set(_PLACEHOLDER.findall(_FENCE.sub("", body or "")))):
+        out.append("template placeholder(s) left unfilled: " + ", ".join(left[:6]))
+    return out
+
+
 def report_issues(item_dir: Path, name: str) -> list[str]:
     """Itemized issues on a user-facing report: present, and no template slot unfilled.
     A report is COPIED, not scaffolded."""

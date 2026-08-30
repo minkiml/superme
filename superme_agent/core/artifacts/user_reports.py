@@ -43,9 +43,34 @@ _LENS_LINE = re.compile(r"(?mi)^(\s*[-*]\s+)(" + "|".join(LENSES) + r")(\s*:)")
 
 
 def _bold_lenses(text: str) -> str:
-    """Bold the lens name that OPENS a `## What else was looked at` bullet. Here rather than
-    in CSS, so ONE rule says what a label looks like."""
-    return _LENS_LINE.sub(lambda m: f"{m.group(1)}**{m.group(2)}{m.group(3).strip()}**", text)
+    """Bold the lens name that OPENS a `## What else was looked at` bullet, and capitalize it.
+    Here rather than in CSS, so ONE rule says what a label looks like — casing included, or the
+    label reads as whatever the author happened to type."""
+    return _LENS_LINE.sub(
+        lambda m: f"{m.group(1)}**{m.group(2).capitalize()}{m.group(3).strip()}**", text)
+
+
+_LENS_ANY = re.compile(r"(?i)\b(" + "|".join(LENSES) + r")\s*:")
+
+
+def lens_slot_issues(text: str) -> list[str]:
+    """Why `What else was looked at` is not one bullet per lens.
+
+    `_bold_lenses` only fires on a bullet opener, so lenses run together as a paragraph render as
+    prose and NOTHING says so — the slot looks filled and reads as a wall."""
+    body = (text or "").strip()
+    if not body:
+        return []
+    loose = [ln.strip() for ln in body.splitlines()
+             if _LENS_ANY.search(ln) and not _LENS_LINE.match(ln)]
+    if loose:
+        return ["`looked_at` runs its lenses together instead of giving each its own bullet. "
+                "Write one bullet per lens, opening with the lens name — `- Intent: ...` — "
+                f"one fact each, under 20 words. First line that does not: {loose[0][:70]!r}"]
+    if not _LENS_LINE.search(body):
+        return [f"`looked_at` opens no bullet with a lens. Each bullet starts with one of "
+                f"{', '.join(LENSES)}, as `- Intent: ...`."]
+    return []
 
 
 def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
@@ -114,6 +139,8 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     """Vet writes the narrative, code writes `## What didn't hold`.
 
     One writer each, so vet cannot write around a red check."""
+    if bad := lens_slot_issues(_slot(looked_at, "What else was looked at")):
+        raise ValueError("; ".join(bad) + " Nothing was written.")
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])] \
