@@ -536,6 +536,9 @@ async def ws_agent(ws: WebSocket) -> None:
                     approve=turn_approve,
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # default; stated because chat is where a silent skill tempts
+                    # The ONE surface with a turn after this one: a person can read a subagent's
+                    # late result. Every kernel-fired run is a single turn and defaults to False.
+                    has_later_turn=True,
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
                     preamble=session_append,       # Focus (work-item) / Guard (general) block
                     # A bound chat already names its subject, so it skips the board-wide list; an

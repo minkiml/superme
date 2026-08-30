@@ -20,7 +20,8 @@ from .lifecycle import (LiveTokens, begin_run, dev_mcp, end_run, log, mark_item_
 from .capture import capture_event, capture_prompt
 from .checkpoints import bank_auto_checkpoint, compacted_checkpoint
 from .completion import UNREPORTED, ensure_completion
-from .background import run_background_item_skill, _run_background_triage
+from .background import (phase_exit_check, run_background_item_skill,
+                         _run_background_triage)
 
 def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
     """Fire the review-entry run for an item that just landed at review.
@@ -243,7 +244,9 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id,
                                       scope=str(live_item.get("phase") or phase)),
-                           "run": make_run_report_server(sink)},
+                           "run": make_run_report_server(sink, exit_check=phase_exit_check(
+                               str(live_item.get("phase") or phase), item_dir,
+                               live_item.get("kind")))},
         preamble=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     ):

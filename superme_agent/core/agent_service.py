@@ -139,6 +139,18 @@ def _read_roots(ctx: Context) -> list[Path]:
     return roots
 
 
+def _with_single_turn_hook(hooks: dict | None, has_later_turn: bool) -> dict | None:
+    """Add the single-turn PreToolUse guard unless this surface has a turn after this one."""
+    if has_later_turn:
+        return hooks
+    from claude_agent_sdk.types import HookMatcher
+    from .permissions import single_turn_hook
+    merged = dict(hooks or {})
+    merged["PreToolUse"] = [*merged.get("PreToolUse", []),
+                            HookMatcher(matcher=None, hooks=[single_turn_hook()])]
+    return merged
+
+
 class AgentService:
     """Runs SDK turns for any surface, emitting TurnEvents."""
 
@@ -380,6 +392,8 @@ class AgentService:
         shell_roots: list[Path] | None = None,
         hooks: dict | None = None, block_categories: set[str] | None = None,
         deny_write_tools: str | None = None,
+        wrong_tree_nudge: str | None = None,
+        has_later_turn: bool = False,
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
@@ -419,7 +433,8 @@ class AgentService:
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
-            hooks=hooks,
+            # Composed HERE, not at each runner: a run that forgets is the failure this guards.
+            hooks=_with_single_turn_hook(hooks, has_later_turn),
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
                 # `cwd` does two INDEPENDENT jobs: resolving relative reads, and pinning the shell
@@ -431,6 +446,7 @@ class AgentService:
                 write_boundary=write_boundary,
                 shell_roots=shell_roots,
                 deny_write_tools=deny_write_tools,
+                wrong_tree_nudge=wrong_tree_nudge,
                 protected_paths=protected_paths,
                 protected_nudge=protected_nudge,
             ),
@@ -463,6 +479,8 @@ class AgentService:
         hooks: dict | None = None,
         block_categories: set[str] | None = None,
         deny_write_tools: str | None = None,
+        wrong_tree_nudge: str | None = None,
+        has_later_turn: bool = False,
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
@@ -479,6 +497,8 @@ class AgentService:
             general_write_root=general_write_root, write_boundary=write_boundary,
             shell_roots=shell_roots, hooks=hooks, block_categories=block_categories,
             deny_write_tools=deny_write_tools,
+            wrong_tree_nudge=wrong_tree_nudge,
+            has_later_turn=has_later_turn,
             protected_paths=protected_paths, protected_nudge=protected_nudge,
             sandbox_writes=sandbox_writes, item_bound=item_bound, charter_key=charter_key,
         )

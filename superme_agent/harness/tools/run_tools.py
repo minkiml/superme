@@ -146,7 +146,21 @@ def _commit_spec(raw) -> tuple[dict | None, str]:
     return {"type": ctype, "subject": subject}, ""
 
 
-def _report_completion(*, completion_sink: dict | None = None, **_):
+def _exit_blockers(exit_check) -> str | None:
+    """What this phase owes before it may declare an ending, or None.
+
+    A phase that finishes in a state its own gate rejects sends the item round a send-back, a
+    re-run and a second gate — to fix what it was already holding when it stopped."""
+    if exit_check is None:
+        return None
+    try:
+        issues = exit_check()
+    except Exception:                    # noqa: BLE001 — never turn a finished run into a failure
+        return None
+    return "; ".join(issues) if issues else None
+
+
+def _report_completion(*, completion_sink: dict | None = None, exit_check=None, **_):
     """Validate and deliver one run's completion payload into the runner's per-run sink.
 
     The stored shape keeps top-level outcome, summary and next beside the full payload."""
@@ -183,6 +197,14 @@ def _report_completion(*, completion_sink: dict | None = None, **_):
                      **({"questions": questions} if questions else {})},
         }
         
+        # `needs_user` and `blocked` are endings that REPORT a wall; they are not claims the
+        # phase's own work is complete, so they are never held here.
+        if outcome not in ("needs_user", "blocked") and (owed := _exit_blockers(exit_check)):
+            return _err(
+                f"Not yet — this phase's own artifact does not pass its gate: {owed}. "
+                f"The gate ahead runs this same check, so declaring now costs a send-back, a "
+                f"re-run and a second judgment to fix what you are holding right now. Fix it, then "
+                f"call this again. If you believe the check is wrong, report `blocked` and say so.")
         if completion_sink is not None:
             completion_sink["report"] = payload
         return _ok("ok")
@@ -324,10 +346,13 @@ SUBMIT_GATE_VERDICT_TOOL = ToolSpec(
 )
 
 
-def make_run_report_server(sink: dict):
+def make_run_report_server(sink: dict, *, exit_check=None):
     """The `run` MCP server (report_completion only), bound to one run's sink — mounted by every
-    kernel-fired work-item runner, read by it after the turn ends."""
-    return build_mcp_server("run", [REPORT_COMPLETION_TOOL], completion_sink=sink)
+    kernel-fired work-item runner, read by it after the turn ends.
+
+    `exit_check` is a zero-arg callable returning this phase's unmet gate conditions."""
+    return build_mcp_server("run", [REPORT_COMPLETION_TOOL], completion_sink=sink,
+                            exit_check=exit_check)
 
 
 def make_deputy_verdict_server(sink: dict):

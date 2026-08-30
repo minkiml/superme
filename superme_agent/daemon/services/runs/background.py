@@ -7,8 +7,8 @@ from pathlib import Path
 from ...app_state import (agent as _agent, dev as _dev, dev_store as _dev_store,
                           sessions as _sessions, spine as _spine)
 from ...deps import cache_slash as _cache_slash
-from ....core import (Init, Result, Status, TextDelta, ToolResult, Usage, deny_all,
-                      scoped_writes_approve)
+from ....core import (Init, Result, Status, TextDelta, ToolResult, Usage, WRONG_TREE_NUDGE,
+                      deny_all, scoped_writes_approve)
 from ....core import artifacts as _arts
 from ....core import autopilot as _autopilot
 from ....core import git_layer, kernel_speech
@@ -20,6 +20,17 @@ from .capture import capture_event, capture_prompt, capture_run_input, surface_f
 from .checkpoints import bank_auto_checkpoint, reset_vet_thread
 from .completion import UNREPORTED, ensure_completion
 from .close import _clear_or_retry
+
+def phase_exit_check(skill: str, item_dir: Path, kind: str | None):
+    """The gate condition this phase's own artifact must already meet, or None.
+
+    Only where the gate ahead runs a MECHANICAL check on an artifact this phase writes: the run
+    still holds the thing that needs fixing, and the next reader does not."""
+    if skill != "plan":
+        return None
+    return lambda: _arts.self_check(item_dir, "plan",
+                                    item_kind=kind_profiles.get_profile(kind).kind)
+
 
 async def run_background_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                                model: str | None = None, effort: str | None = None) -> None:
@@ -111,6 +122,9 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         model=model,
         effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
         approve=scoped_writes_approve(item_dir, deny_all),
+        # Review alone: it runs at the repo root while the item's branch lives in a worktree, and
+        # it is the only scope holding the tool the refusal names.
+        wrong_tree_nudge=WRONG_TREE_NUDGE if skill == "review" else None,
         # Without a shell boundary every command the read-only classifier cannot prove goes to
         # `deny_all`, with no path to allow.
         write_boundary=[item_dir],
@@ -119,7 +133,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         shell_roots=scratch_tree,
         sandbox_writes=[item_dir, *scratch_tree],   # the kernel holds the same two roots
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
-                           "run": make_run_report_server(sink)},
+                           "run": make_run_report_server(
+                               sink, exit_check=phase_exit_check(skill, item_dir, item.get("kind")))},
         preamble=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     )
