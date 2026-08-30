@@ -53,7 +53,11 @@ _BASH_OUTSIDE_BOUNDARY = (
     "start there, and the command does not name it — so nothing about the call says it stays "
     "inside. Scope it in and it runs with no approval at all: `cd {first} && <your command>`, or "
     "pass the directory explicitly (`git -C {first} …`). Keep every path it names inside that "
-    "directory. If the work genuinely belongs outside it, that is a wall — say so in your record "
+    "directory.{wall}"
+)
+# Both boundary refusals end here, so the rule is stated once and formatted into each.
+_BOUNDARY_WALL = (
+    " If the work genuinely belongs outside the boundary, that is a wall — say so in your record "
     "rather than looking for another way through."
 )
 # Only when the boundary actually HAS a scratch dir — telling a builder to create one would litter
@@ -63,6 +67,13 @@ _BASH_SCRATCH_HINT = (
     "directory at `{scratch}/`. It is inside the boundary, so commands writing there need no "
     "approval; nothing in it is read as a result or kept after the item closes. Use it instead of "
     "`$TMPDIR` or `/tmp`, which are outside every boundary."
+)
+# An ESCAPING command used to fall through to the approval refusal, which told the agent the call
+# was not judged on its merits — false, and it gave up rather than fixing one mistyped path.
+_BASH_ESCAPES_BOUNDARY = (
+    "That command names {paths}, outside this run's boundary ({roots}). One such path refuses the "
+    "whole command, however legal the rest of it is — so check that path before anything else; a "
+    "mistyped id or a sibling item's folder is the usual cause.{wall}"
 )
 # The number is the point: not the individual wall, but how many there were by report time.
 _REFUSAL_TALLY = (
@@ -90,6 +101,21 @@ _ASK_IN_TEXT_NUDGE = (
 
 # Real dev work flows through a work-item. Denied with FEEDBACK and no prompt, so the agent pivots
 # to itemizing.
+# A kernel-fired run is ONE turn. Nothing arrives after it: a backgrounded subagent's result and a
+# scheduled wake-up both land in a turn that never comes, and the run ends having produced nothing.
+_NO_LATER_TURN_TOOLS = {"ScheduleWakeup", "CronCreate", "CronDelete", "CronList", "Monitor"}
+_NO_LATER_TURN_NUDGE = (
+    "`{tool}` waits for something to happen after this turn, and this run has no turn after this "
+    "one — it is a single background turn that ends when you stop. Whatever you were waiting for "
+    "will never arrive. Do the work inline now, and if you genuinely cannot, say so in your final "
+    "report rather than waiting."
+)
+_BACKGROUND_SUBAGENT_NUDGE = (
+    "A backgrounded subagent reports back in a LATER turn, and this run has none — its result "
+    "would never reach you. Spawn it again with `run_in_background: false` so it finishes inside "
+    "this turn and hands you its answer."
+)
+
 _GENERAL_SESSION_BLOCKED = set(_WRITE_TOOLS)
 _GENERAL_SESSION_NUDGE = (
     "Mutating the project's real code (writing/editing files or implementing) is disabled in a "
@@ -233,6 +259,29 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
     return False
 
 
+def single_turn_hook():
+    """A PreToolUse hook enforcing "this run has no later turn".
+
+    A HOOK, not `can_use_tool`: the SDK does not consult the permission callback for `Agent` or
+    for its own control tools, so the callback version of this guard never ran. Measured live —
+    a backgrounded spawn and a `ScheduleWakeup` both sailed past it."""
+    async def pre_tool_use(input_data: dict, tool_use_id, context):
+        tool = str(input_data.get("tool_name") or "")
+        args = input_data.get("tool_input") or {}
+        reason = None
+        if tool in _NO_LATER_TURN_TOOLS:
+            reason = _NO_LATER_TURN_NUDGE.format(tool=tool)
+        elif tool in SUBAGENT_TOOLS and args.get("run_in_background") is not False:
+            reason = _BACKGROUND_SUBAGENT_NUDGE
+        if reason is None:
+            return {}
+        log.info("single-turn hook denied %s", tool)
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                       "permissionDecision": "deny",
+                                       "permissionDecisionReason": reason}}
+    return pre_tool_use
+
+
 async def deny_all(tool_name: str, tool_input: dict) -> bool | str:
     """An ApproveFn that denies everything, and says so — an agent told only "denied"
     keeps spending turns."""
@@ -315,6 +364,48 @@ VET_READONLY_NUDGE = (
 )
 
 
+# Review runs at the repo root while the item's code sits unmerged in its own worktree. `git`
+# forbids one branch in two worktrees, so the root's HEAD is NEVER the item's branch: a read
+# through ambient HEAD answers about a different tree and says so nowhere.
+WRONG_TREE_NUDGE = (
+    "That command reads `HEAD`, and your shell is in the repo root — which cannot have this "
+    "item's branch checked out, so it would describe a different tree and tell you nothing was "
+    "wrong. Use `read_item_diff(item_id)` for the diff, the commits and the file counts, and "
+    "`path=` to read one file in full. If you truly meant the repo root, name the revision "
+    "instead of `HEAD`."
+)
+
+# `-C`/`--git-dir`/`--work-tree` redirect the command at a named tree, which is the correct form.
+_GIT_REDIRECTS = ("-C", "--git-dir", "--work-tree")
+# `HEAD` as a revision, in any range or suffix form. A path like `src/HEADER.py` is not one.
+_HEAD_REV = re.compile(r"(?<![A-Za-z0-9_/-])HEAD(?![A-Za-z0-9_])")
+
+
+def reads_ambient_head(command: str) -> bool:
+    """A git read whose revision is the SHELL's HEAD rather than a named tree or revision.
+
+    `HEAD` as an explicit token only: a bare `git log -5` asks about the root's history on
+    purpose, while `main...HEAD` is trying to describe the item and getting the root."""
+    if not command or "HEAD" not in command:
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    seg: list[str] = []
+    for tok in [*tokens, ";"]:
+        if tok in _BASH_SEPARATORS:
+            if seg and seg[0] == "git" \
+                    and not any(t in _GIT_REDIRECTS or t.startswith(tuple(f"{r}=" for r in _GIT_REDIRECTS))
+                                for t in seg) \
+                    and any(_HEAD_REV.search(t) for t in seg[1:]):
+                return True
+            seg = []
+        else:
+            seg.append(tok)
+    return False
+
+
 def _in_any(target: Path, roots: list[Path]) -> bool:
     """True if `target` resolves inside any of `roots` (a root itself counts as inside)."""
     try:
@@ -382,18 +473,24 @@ def _scratch_in(roots: list[Path]) -> Path | None:
 
 
 # Absolute-looking tokens are the only part of a shell command we can honestly reason about.
-def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
-    """True if the command NAMES an absolute path outside every root. A cheap
-    accident-catcher — escaping prompts, never denies."""
+def _bash_escaping_paths(command: str, roots: list[Path]) -> list[str]:
+    """The absolute paths the command names that lie outside every root."""
+    out = []
     for raw in _path_tokens(command):
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
         if not _is_absolute_token(tok) or _is_pseudo_device(tok):
             continue
-        if _outside_every(tok, roots):
-            return True
-    return False
+        if _outside_every(tok, roots) and tok not in out:
+            out.append(tok)
+    return out
+
+
+def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
+    """True if the command NAMES an absolute path outside every root. A cheap
+    accident-catcher — escaping prompts, never denies."""
+    return bool(_bash_escaping_paths(command, roots))
 
 
 def shlex_split_safe(command: str) -> list[str]:
@@ -448,6 +545,36 @@ def _path_tokens(command: str) -> list[str]:
             else:
                 seg.append(tok)
     return out
+
+
+# `NAME=/abs/path` and nothing else: no `$(...)`, no backticks, no other name, nothing after the
+# path. Anything richer is a value this cannot know without running the shell.
+_LITERAL_ASSIGN = re.compile(r"""(?m)(?:^|(?<=[;&|\n]))\s*([A-Za-z_][A-Za-z0-9_]*)=(['"]?)(/[^\s;&|'"`$]*)\2\s*(?=$|[;&|\n])""")
+_USES_NAME = r"\$\{?%s\}?"
+
+
+def _expand_literal_assignments(command: str) -> str:
+    """Substitute shell names that were assigned a LITERAL absolute path in the same command.
+
+    For JUDGING only — the expansion is never run. An agent naming its own long folder once and
+    reusing it was refused for the shortcut alone, while the spelled-out form was allowed.
+
+    Deliberately narrow: a value holding a command, another name, or a relative path is left
+    unexpanded, so it stays refused exactly as before. Escapes are NOT excused — the expanded text
+    goes through the same outside-the-boundary check, `../..` included."""
+    values: dict[str, str] = {}
+    for m in _LITERAL_ASSIGN.finditer(command):
+        values[m.group(1)] = m.group(3)   # a later assignment wins, which is what the shell does
+    if not values:
+        return command
+    out = command
+    for name, value in values.items():
+        out = re.sub(_USES_NAME % re.escape(name), value.replace("\\", "\\\\"), out)
+    # The assignment itself is inert — it names a path without touching it. Dropping it keeps a
+    # bare `NAME=/path` from reading as a verb nobody classified, and from counting as a "use" of
+    # a path the command never reaches.
+    out = _LITERAL_ASSIGN.sub(" ", out)
+    return out.strip(" ;&|\n") or command
 
 
 def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
@@ -624,6 +751,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        write_boundary: list[Path] | None = None,
                        shell_roots: list[Path] | None = None,
                        deny_write_tools: str | None = None,
+                       wrong_tree_nudge: str | None = None,
                        protected_paths: list[Path] | None = None,
                        protected_nudge: str | None = None,
                        subagent_cap: int | None = MAX_SUBAGENTS):
@@ -703,22 +831,39 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             if publishes_outward(command):
                 log.warning("outward publish denied: %s", command)
                 return PermissionResultDeny(message=_PUBLISH_NUDGE)
-            if is_read_only_bash(command):
+            # Read-only, and still refused: correctness, not safety. A wrong-tree read is the
+            # one failure that looks like an answer.
+            if wrong_tree_nudge and reads_ambient_head(command):
+                log.info("ambient-HEAD read denied: %s", command[:200])
+                return PermissionResultDeny(message=wrong_tree_nudge)
+            # Judged on what the paths ARE, not on whether the agent spelled each one out twice.
+            # The expansion is never run; every check below still sees the real paths.
+            judged = _expand_literal_assignments(command)
+            if is_read_only_bash(judged):
                 return PermissionResultAllow()
             # `reachable` is the shell's territory: the write boundary plus this run's
             # `shell_roots`. Write TOOLS ignore it.
             reachable = [*(write_boundary or []), *(shell_roots or [])]
-            if (reachable and not _bash_escapes_boundary(command, reachable)
+            if (reachable and not _bash_escapes_boundary(judged, reachable)
                     and ((cwd is not None and _in_any(cwd, reachable))
-                         or _bash_scoped_into_boundary(command, reachable))):
+                         or _bash_scoped_into_boundary(judged, reachable))):
                 return PermissionResultAllow()
-            # Only when scoping it in WOULD work: a command that truly reaches outside gets the
-            # plain refusal instead.
-            if reachable and not _bash_escapes_boundary(command, reachable):
+            # Two different walls, and the agent can only act on the one it is told about:
+            # scoping the command in would work, or one named path is outside.
+            escaping = _bash_escaping_paths(judged, reachable) if reachable else []
+            if reachable and not escaping:
                 bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
-                    roots=", ".join(f"`{r}`" for r in reachable), first=reachable[0])
+                    roots=", ".join(f"`{r}`" for r in reachable), first=reachable[0],
+                    wall=_BOUNDARY_WALL)
+                # A hint only where it can be acted on: see the escape branch below.
                 if scratch := _scratch_in(write_boundary):
                     bash_boundary_miss += _BASH_SCRATCH_HINT.format(scratch=scratch)
+            elif escaping:
+                # NO scratch hint here — the command reaches genuinely outside, so pointing at a
+                # scratch dir is advice that cannot be followed. Naming the path is what helps.
+                bash_boundary_miss = _BASH_ESCAPES_BOUNDARY.format(
+                    paths=", ".join(f"`{p}`" for p in escaping[:3]),
+                    roots=", ".join(f"`{r}`" for r in reachable), wall=_BOUNDARY_WALL)
         # Keep reads inside the host's scope, before the safe-tool auto-allow.
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)

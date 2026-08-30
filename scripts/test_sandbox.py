@@ -356,6 +356,112 @@ def test_a_kernel_device_is_not_a_place():
        perms._bash_escapes_boundary("cat /etc/hosts", roots))
 
 
+def test_an_escaping_command_names_the_path_that_escaped():
+    """A Bash command naming ONE path outside the boundary is told which one.
+
+    Live 2026-08-30: a vet probe mistyped an item id in a `mkdir`, so an otherwise-legal command
+    escaped. The refusal it got was the approval fallback — "not a judgment on this particular
+    call" — which was false, and vet gave up a check rather than fixing one character."""
+    from superme_agent.core.permissions import _bash_escaping_paths
+    wt = Path("/tmp/wt/item-a")
+    item = Path("/tmp/knowledge/work-items/item-a")
+    roots = [wt, item]
+
+    typo = (f'cd {wt}\n'
+            f'mkdir -p /tmp/knowledge/work-items/item-b/scratch 2>/dev/null\n'
+            f'mkdir -p {item}/scratch')
+    out = _bash_escaping_paths(typo, roots)
+    ok("the escaping path is identified", len(out) == 1)
+    ok("...and it is the mistyped sibling, not the legal paths",
+       out and out[0].endswith("item-b/scratch"))
+    ok("the same command with the typo fixed does not escape",
+       not _bash_escaping_paths(typo.replace("item-b", "item-a"), roots))
+    ok("a pseudo-device is not an escape",
+       not _bash_escaping_paths("echo x 2>/dev/null", roots))
+    ok("a relative path is not an escape",
+       not _bash_escaping_paths("python ./probe.py", roots))
+    ok("every escaping path is reported, not just the first",
+       len(_bash_escaping_paths("cp /etc/a /var/b", roots)) == 2)
+
+    # The message has to reach the agent, or naming the path changes nothing.
+    from superme_agent.core import permissions as _p
+    msg = _p._BASH_ESCAPES_BOUNDARY.format(paths="`/tmp/x`", roots="`/tmp/wt`",
+                                           wall=_p._BOUNDARY_WALL)
+    ok("the message quotes the offending path", "/tmp/x" in msg)
+    ok("...and says one path refuses the whole command", "whole command" in msg)
+    ok("...and the wall rule is stated ONCE, formatted into both refusals",
+       _p._BOUNDARY_WALL in msg
+       and _p._BOUNDARY_WALL not in _p._BASH_ESCAPES_BOUNDARY
+       and "{wall}" in _p._BASH_OUTSIDE_BOUNDARY)
+
+
+def test_a_literal_path_shortcut_is_seen_through():
+    """`ITEM=/abs/path; cat "$ITEM/f"` is judged on the path, not refused for using a variable.
+
+    Live 2026-08-30: 4 of one run's 5 refusals were an agent reading its OWN folder through a
+    shortcut it had just assigned. The same command with the path spelled out twice is allowed.
+
+    ONLY a plain literal assignment is followed. The controls below are the point: a shortcut can
+    hide a command (`X=$(...)`) or walk back out (`$X/../..`), and following either would flip the
+    error from 'refuses too much' to 'allows outside the boundary'."""
+    from superme_agent.core.permissions import (_expand_literal_assignments,
+                                                _bash_escaping_paths,
+                                                _bash_scoped_into_boundary, is_read_only_bash)
+    item = Path("/tmp/knowledge/work-items/item-a")
+    roots = [item]
+
+    # THE CASE THIS EXISTS FOR — the command that was refused live.
+    real = (f'ITEM={item}; echo "--item--"; cat "$ITEM/item.md" 2>/dev/null; '
+            f'ls "$ITEM/artifacts"')
+    ok("the shortcut is followed to its path", str(item) in _expand_literal_assignments(real))
+    ok("...so the read reads as read-only", is_read_only_bash(_expand_literal_assignments(real)))
+    ok("...and as scoped into the boundary",
+       _bash_scoped_into_boundary(_expand_literal_assignments(real), roots))
+    ok("...and it does not escape", not _bash_escaping_paths(_expand_literal_assignments(real), roots))
+
+    # CONTROL 1 — walking back out of the boundary must still escape.
+    out = f'ITEM={item}; cat "$ITEM/../../../etc/passwd"'
+    ok("a shortcut walked back OUT of the boundary still escapes",
+       bool(_bash_escaping_paths(_expand_literal_assignments(out), roots)))
+    ok("...and is not read as scoped in",
+       not _bash_scoped_into_boundary(_expand_literal_assignments(out), roots))
+
+    # CONTROL 2 — a shortcut holding a COMMAND is never followed.
+    for hidden in (f'ITEM=$(cat /etc/secret); cat "$ITEM/f"',
+                   f'ITEM=`cat /etc/secret`; cat "$ITEM/f"',
+                   f'ITEM=${{OTHER}}/x; cat "$ITEM/f"'):
+        ok(f"a shortcut hiding a command is left alone: {hidden[:22]}",
+           "$ITEM" in _expand_literal_assignments(hidden))
+
+    # CONTROL 3 — an assignment to a RELATIVE path proves nothing about where it lands.
+    rel = 'ITEM=../elsewhere; cat "$ITEM/f"'
+    ok("a relative shortcut is not followed", "$ITEM" in _expand_literal_assignments(rel))
+
+    # CONTROL 4 — the last assignment wins, and an unassigned name stays unexpanded.
+    two = f'ITEM=/tmp/other; ITEM={item}; cat "$ITEM/f"'
+    ok("a reassigned shortcut takes its LAST value",
+       _expand_literal_assignments(two).rstrip().endswith(f'cat "{item}/f"'))
+    ok("a name that was never assigned is left alone",
+       "$NOPE" in _expand_literal_assignments('cat "$NOPE/f"'))
+
+    # CONTROL 5 — expansion is for JUDGING only; a command outside stays outside.
+    outside = 'P=/etc; cat "$P/passwd"'
+    ok("expanding does not smuggle an outside path in",
+       bool(_bash_escaping_paths(_expand_literal_assignments(outside), roots)))
+
+    # CONTROL 6 — the one place this LOOSENS: an assignment naming an outside path that the
+    # command never uses. Naming a path is not touching it, so this is allowed on purpose.
+    unused = f'P=/etc; cat {item}/f'
+    ok("an outside path that is assigned but never used no longer blocks the command",
+       not _bash_escaping_paths(_expand_literal_assignments(unused), roots))
+    ok("...but the moment it IS used, it escapes again",
+       bool(_bash_escaping_paths(_expand_literal_assignments(f'P=/etc; cat "$P/passwd"'), roots)))
+
+    # CONTROL 7 — `${ITEM}` is the same shortcut as `$ITEM`.
+    braced = f'ITEM={item}; cat "${{ITEM}}/item.md"'
+    ok("the braced form is followed too", str(item) in _expand_literal_assignments(braced))
+
+
 def main() -> None:
     test_policy()
     test_fragment_contract()
@@ -369,6 +475,8 @@ def main() -> None:
     test_research_cannot_reach_the_codebase()
     test_the_kernel_counts_what_it_refused()
     test_a_kernel_device_is_not_a_place()
+    test_an_escaping_command_names_the_path_that_escaped()
+    test_a_literal_path_shortcut_is_seen_through()
     print(f"\nALL GREEN — {PASS} checks passed (self-cleaned).")
 
 
