@@ -362,7 +362,8 @@ async def ws_agent(ws: WebSocket) -> None:
                 # worktree and item dir, denied on main.
                 if item_worktree:
                     write_boundary = [item_worktree, item_dir]
-                    if kind_profiles.role_uses_worktree(session_role, item.get("kind")):
+                    if kind_profiles.phase_uses_worktree(str(item.get("phase") or ""),
+                                                        item.get("kind")):
                         ctx = replace(ctx, cwd=item_worktree)
                 # Vet is read-only on files; the shell stays, because running checks is the job.
                 if session_role == "vet":

@@ -100,6 +100,19 @@ def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tupl
     return copied, skipped
 
 
+def item_worktree_cwd(ctx, item: dict, phase: str) -> Path:
+    """The tree a phase's turn stands in.
+
+    The repo root cannot have the item's branch checked out."""
+    if not kind_profiles.phase_uses_worktree(phase, str(item.get("kind") or "")):
+        return ctx.cwd
+    wt = str(item.get("git_worktree") or "")
+    if wt and Path(wt).is_dir():
+        return Path(wt)
+    # Plan can be re-entered on an item whose tree was never made or has been removed.
+    return ctx.cwd
+
+
 def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store, spine) -> Path:
     """The isolated tree a READ-ONLY kind reads from, created on demand.
 

@@ -59,12 +59,16 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     item = _dev.read_work_item(dev_root, item_id) or {}
     # A read-only kind reads its own detached checkout; swapping here keeps every phase on one
     # cwd.
-    from ..git_ops import ensure_scratch_worktree
+    from ..git_ops import ensure_scratch_worktree, item_worktree_cwd
     repo_dir = ensure_scratch_worktree(ctx, context_id, item,
                                        dev=_dev, dev_store=_dev_store, spine=_spine)
     if repo_dir != ctx.cwd:
         ctx = replace(ctx, cwd=repo_dir)
         item = _dev.read_work_item(dev_root, item_id) or item   # re-read: the git record moved
+    # A phase that reads the item's code stands in the item's tree.
+    stand_in = item_worktree_cwd(ctx, item, str(item.get("phase") or ""))
+    if stand_in != ctx.cwd:
+        ctx = replace(ctx, cwd=stand_in)
     # The phase this run is, not `skill` — `itemize` is a research item's closing run.
     run_phase = str(item.get("phase") or "triage")
     # Resuming this phase's own thread continues where it left off; a first entry has no slot, so
@@ -118,7 +122,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         write_boundary=[item_dir],
         # One path outside the boundary refuses the whole command, so the shell may name the
         # scratch worktree.
-        shell_roots=scratch_tree,
+        shell_roots=scratch_tree or ([Path(str(item.get("git_worktree")))]
+                                     if str(ctx.cwd) == str(item.get("git_worktree") or "") else []),
         sandbox_writes=[item_dir, *scratch_tree],   # the kernel holds the same two roots
         extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
                            "run": make_run_report_server(

@@ -150,7 +150,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     worktree_removed = None
     if item.get("git_worktree"):
         try:
-            worktree_removed = bool(git_layer.remove_worktree(ctx.cwd, ctx.id, item_id)["verified"])
+            worktree_removed = bool(git_layer.remove_worktree(
+                ctx.cwd, ctx.id, item_id, branch=item.get("git_branch"))["verified"])
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False
             log.warning("abandon: worktree cleanup failed for %s: %s", item_id, e)

@@ -2071,7 +2071,13 @@
   "LENSES": {
    "sig": "value:tuple"
   },
+  "_LENS_ANY": {
+   "sig": "value:Pattern"
+  },
   "_LENS_LINE": {
+   "sig": "value:Pattern"
+  },
+  "_LENS_OPENER": {
    "sig": "value:Pattern"
   },
   "_bold_lenses": {
@@ -2121,6 +2127,10 @@
   "lens_gaps": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(item_dir: pathlib.Path) -> list[dict]"
+  },
+  "lens_slot_issues": {
+   "home": "superme_agent.core.artifacts.user_reports",
+   "sig": "def(text: str) -> list[str]"
   },
   "missing_lenses": {
    "home": "superme_agent.core.artifacts.ledger",
@@ -3735,7 +3745,7 @@
   },
   "remove_worktree": {
    "home": "superme_agent.core.git_layer",
-   "sig": "def(repo_dir: pathlib.Path, repo_id: str, item_id: str) -> dict"
+   "sig": "def(repo_dir: pathlib.Path, repo_id: str, item_id: str, branch: str | None = None) -> dict"
   },
   "repo_lock": {
    "home": "superme_agent.core.git_layer",
@@ -4410,7 +4420,13 @@
   "_ASK_IN_TEXT_NUDGE": {
    "sig": "value:str"
   },
+  "_ASSIGN_VALUE": {
+   "sig": "value:str"
+  },
   "_BACKGROUND_SUBAGENT_NUDGE": {
+   "sig": "value:str"
+  },
+  "_BASH_ESCAPES_BOUNDARY": {
    "sig": "value:str"
   },
   "_BASH_MULTIPLEXERS": {
@@ -4427,6 +4443,9 @@
   },
   "_BASH_UNSAFE_SUBSTR": {
    "sig": "value:tuple"
+  },
+  "_BOUNDARY_WALL": {
+   "sig": "value:str"
   },
   "_DENIED_BY_OWNER": {
    "sig": "value:str"
@@ -4476,6 +4495,9 @@
   "_LEARNING_SCOPE_DENIED": {
    "sig": "value:str"
   },
+  "_LITERAL_ASSIGN": {
+   "sig": "value:Pattern"
+  },
   "_NO_LATER_TURN_NUDGE": {
    "sig": "value:str"
   },
@@ -4521,6 +4543,9 @@
   "_SURFACE_UNSUPPORTED": {
    "sig": "value:set"
   },
+  "_USES_NAME": {
+   "sig": "value:str"
+  },
   "_WRITE_TOOLS": {
    "sig": "value:set"
   },
@@ -4528,9 +4553,17 @@
    "home": "superme_agent.core.permissions",
    "sig": "def(command: str, roots: list[pathlib.Path]) -> bool"
   },
+  "_bash_escaping_paths": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(command: str, roots: list[pathlib.Path]) -> list[str]"
+  },
   "_bash_scoped_into_boundary": {
    "home": "superme_agent.core.permissions",
    "sig": "def(command: str, roots: list[pathlib.Path]) -> bool"
+  },
+  "_expand_literal_assignments": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(command: str) -> str"
   },
   "_in_any": {
    "home": "superme_agent.core.permissions",
@@ -4571,6 +4604,10 @@
   "_segment_read_only": {
    "home": "superme_agent.core.permissions",
    "sig": "def(seg: list[str]) -> bool"
+  },
+  "_split_separators": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tokens: list[str]) -> list[str]"
   },
   "_target_in_any": {
    "home": "superme_agent.core.permissions",
@@ -6197,6 +6234,9 @@
   "SESSION_SLOTS": {
    "sig": "value:tuple"
   },
+  "WORKTREE_PHASES": {
+   "sig": "value:tuple"
+  },
   "_ROLE_FOR_PHASE": {
    "sig": "value:dict"
   },
@@ -6235,13 +6275,13 @@
    "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None, phase: str | None) -> str | None"
   },
+  "phase_uses_worktree": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(phase: str | None, kind: str | None = None) -> bool"
+  },
   "research_kind": {
    "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(item: dict | None) -> str | None"
-  },
-  "role_uses_worktree": {
-   "home": "superme_agent.core.vocab.kind_profiles",
-   "sig": "def(role: str, kind: str | None = None) -> bool"
   },
   "session_role": {
    "home": "superme_agent.core.vocab.kind_profiles",
@@ -12498,8 +12538,18 @@
   "CHECK_TIMEOUT_S": {
    "sig": "value:int"
   },
+  "_NOT_HERMETIC": {
+   "sig": "value:str"
+  },
+  "_RERUN_UNDER_S": {
+   "sig": "value:float"
+  },
   "_TAIL": {
    "sig": "value:int"
+  },
+  "_agrees_on_a_second_run": {
+   "home": "superme_agent.daemon.services.checks",
+   "sig": "def(cmd: str, worktree: pathlib.Path, first_code: int) -> int | None"
   },
   "_run": {
    "home": "superme_agent.daemon.services.checks",
@@ -13126,6 +13176,10 @@
   "item_trailers": {
    "home": "superme_agent.daemon.services.git_ops",
    "sig": "def(item: 'dict', item_id: 'str') -> 'dict'"
+  },
+  "item_worktree_cwd": {
+   "home": "superme_agent.daemon.services.git_ops",
+   "sig": "def(ctx, item: 'dict', phase: 'str') -> 'Path'"
   },
   "log": {
    "sig": "value:Logger"
@@ -16350,8 +16404,14 @@
    "methods": [],
    "sig": "class"
   },
+  "_ABS_TOKEN": {
+   "sig": "value:str"
+  },
   "_SYSTEM_ROOTS": {
    "sig": "value:tuple"
+  },
+  "_WIN_SYSTEM": {
+   "sig": "value:Pattern"
   },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
@@ -16364,6 +16424,10 @@
   "_err": {
    "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
+  },
+  "_is_system_path": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(tok: str) -> bool"
   },
   "_item_dir": {
    "home": "superme_agent.harness.tools.dev_tools.items",

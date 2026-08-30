@@ -535,9 +535,11 @@ def stop_vet_env(wt: Path) -> list[int]:
     return stopped
 
 
-def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
-    """Terminal cleanup: remove the worktree DIR, keep the branch ref. Force-removes,
-    so stray junk cannot block closure."""
+def remove_worktree(repo_dir: Path, repo_id: str, item_id: str,
+                    branch: str | None = None) -> dict:
+    """Remove the worktree dir, and the branch with it.
+
+    A squash already put the content on the anchor."""
     repo_dir = Path(repo_dir)
     wt = worktree_dir(repo_id, item_id)
     removed = False
@@ -552,7 +554,13 @@ def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
     verified = not wt.exists()
     if not verified:
         log.error("worktree dir survived removal: %s", wt)
-    return {"removed": removed, "verified": verified}
+    # Only once the dir is gone. Git refuses to delete a branch a worktree still holds.
+    branch_deleted = None
+    if branch and verified:
+        branch_deleted = delete_branch(repo_dir, branch)["deleted"]
+        if not branch_deleted:
+            log.warning("branch survived removal for %s: %s", item_id, branch)
+    return {"removed": removed, "verified": verified, "branch_deleted": branch_deleted}
 
 
 def delete_branch(repo_dir: Path, branch: str) -> dict:

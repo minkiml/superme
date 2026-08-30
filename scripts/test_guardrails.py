@@ -218,10 +218,10 @@ def test_every_research_phase_reads_from_the_same_tree():
     # One item, one thread, one cwd: two phases on different trees is one agent watching its own
     # paths move.
     ok("a research intake phase runs at the tree",
-       kind_profiles.role_uses_worktree("intake", "research") is True)
+       kind_profiles.phase_uses_worktree("investigate", "research") is True)
     ok("an implementation intake phase still runs at the repo",
-       kind_profiles.role_uses_worktree("intake", "implementation") is False)
-    ok("build/vet are unaffected", kind_profiles.role_uses_worktree("build") is True)
+       kind_profiles.phase_uses_worktree("triage", "implementation") is False)
+    ok("build/vet are unaffected", kind_profiles.phase_uses_worktree("build") is True)
 
 
 def test_the_tree_is_detached_and_disposable():

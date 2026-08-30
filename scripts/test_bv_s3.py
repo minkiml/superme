@@ -45,7 +45,7 @@ def test_role_map() -> None:
     except KeyError:
         ok("unknown phase fails loud", True)
     ok("worktree cwd for build+vet only",
-       [KP.role_uses_worktree(r) for r in KP.SESSION_ROLES] == [False, True, True])
+       [KP.phase_uses_worktree(p) for p in ("triage", "build", "vet")] == [False, True, True])
 
 
 def test_slots(tmp: Path) -> None:

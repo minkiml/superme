@@ -77,7 +77,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     worktree_removed = None
     if item.get("git_worktree"):
         try:
-            res = git_layer.remove_worktree(ctx.cwd, ctx.id, item_id)
+            res = git_layer.remove_worktree(ctx.cwd, ctx.id, item_id,
+                                            branch=item.get("git_branch"))
             worktree_removed = bool(res["verified"])
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False

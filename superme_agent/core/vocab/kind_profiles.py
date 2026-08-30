@@ -188,11 +188,16 @@ def session_role(phase: str | None) -> str:
     return _ROLE_FOR_PHASE[p]
 
 
-def role_uses_worktree(role: str, kind: str | None = None) -> bool:
-    """Worktree cwd (build/vet) or repo cwd (intake). The CLI stores transcripts per cwd."""
+# Everything that reads or writes the item's code. Keyed on the phase, because four phases share
+# the intake role.
+WORKTREE_PHASES = ("plan", "build", "vet", "review")
+
+
+def phase_uses_worktree(phase: str | None, kind: str | None = None) -> bool:
+    """Worktree cwd or repo cwd. The CLI stores transcripts per cwd, so this cannot vary per run."""
     if kind and get_profile(kind).scratch_worktree:
         return True
-    return role in ("build", "vet")
+    return (phase or "") in WORKTREE_PHASES
 
 
 def get_profile(kind: str | None) -> KindProfile:

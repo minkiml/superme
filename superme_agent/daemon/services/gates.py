@@ -245,7 +245,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
                                 detail="plan.md isn't gate-ready — " + "; ".join(plan_issues[:3]))
     # The branch and worktree are created transactionally before the phase flips. A blocking child
     # branches from its parent.
-    if nxt == "build" and profile.worktree and not item.get("git_worktree"):
+    if nxt in ("plan", "build") and profile.worktree and not item.get("git_worktree"):
         from .git_ops import repo_anchor
         base = repo_anchor(ctx, spine)
         sf = item.get("spawned_from") or {}

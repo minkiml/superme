@@ -140,7 +140,10 @@ def _reconcile_worktrees() -> None:
             for item_id in stale_terminal:
                 if git_layer.worktree_dir(rid, item_id).exists():
                     try:
-                        git_layer.remove_worktree(ctx.cwd, rid, item_id)
+                        git_layer.remove_worktree(
+                            ctx.cwd, rid, item_id,
+                            branch=(app_state.dev.read_work_item(ctx.internal_root / "dev", item_id)
+                                    or {}).get("git_branch"))
                         log.info("worktree reconcile [%s]: removed terminal item %s's leftover dir",
                                  rid, item_id)
                     except Exception:
