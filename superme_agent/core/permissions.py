@@ -68,8 +68,7 @@ _BASH_SCRATCH_HINT = (
     "approval; nothing in it is read as a result or kept after the item closes. Use it instead of "
     "`$TMPDIR` or `/tmp`, which are outside every boundary."
 )
-# An ESCAPING command used to fall through to the approval refusal, which told the agent the call
-# was not judged on its merits — false, and it gave up rather than fixing one mistyped path.
+# One named path outside the boundary refuses the whole command, however legal the rest is.
 _BASH_ESCAPES_BOUNDARY = (
     "That command names {paths}, outside this run's boundary ({roots}). One such path refuses the "
     "whole command, however legal the rest of it is — so check that path before anything else; a "
@@ -99,10 +98,8 @@ _ASK_IN_TEXT_NUDGE = (
     "call in your final report."
 )
 
-# Real dev work flows through a work-item. Denied with FEEDBACK and no prompt, so the agent pivots
-# to itemizing.
-# A kernel-fired run is ONE turn. Nothing arrives after it: a backgrounded subagent's result and a
-# scheduled wake-up both land in a turn that never comes, and the run ends having produced nothing.
+# A kernel-fired run is one turn. A backgrounded result or scheduled wake-up lands in a turn that
+# never comes.
 _NO_LATER_TURN_TOOLS = {"ScheduleWakeup", "CronCreate", "CronDelete", "CronList", "Monitor"}
 _NO_LATER_TURN_NUDGE = (
     "`{tool}` waits for something to happen after this turn, and this run has no turn after this "
@@ -116,6 +113,8 @@ _BACKGROUND_SUBAGENT_NUDGE = (
     "this turn and hands you its answer."
 )
 
+# Real dev work flows through a work-item. Denied with feedback and no prompt, so the agent
+# pivots to itemizing.
 _GENERAL_SESSION_BLOCKED = set(_WRITE_TOOLS)
 _GENERAL_SESSION_NUDGE = (
     "Mutating the project's real code (writing/editing files or implementing) is disabled in a "
@@ -260,11 +259,9 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
 
 
 def single_turn_hook():
-    """A PreToolUse hook enforcing "this run has no later turn".
+    """A PreToolUse hook enforcing that this run has no later turn.
 
-    A HOOK, not `can_use_tool`: the SDK does not consult the permission callback for `Agent` or
-    for its own control tools, so the callback version of this guard never ran. Measured live —
-    a backgrounded spawn and a `ScheduleWakeup` both sailed past it."""
+    The SDK never consults `can_use_tool` for `Agent`."""
     async def pre_tool_use(input_data: dict, tool_use_id, context):
         tool = str(input_data.get("tool_name") or "")
         args = input_data.get("tool_input") or {}
@@ -289,10 +286,9 @@ async def deny_all(tool_name: str, tool_input: dict) -> bool | str:
 
 
 def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
-    """Auto-allow writes INSIDE `allowed_dir`, defer the rest to `fallback`.
+    """Auto-allow writes inside `allowed_dir`, defer the rest to `fallback`.
 
-    `Bash` gets the same scope: these sessions run at the repo cwd, so only a self-scoping command
-    auto-allows."""
+    Bash gets the same scope, so only a self-scoping command auto-allows."""
     allowed = allowed_dir.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
@@ -317,8 +313,9 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
 
 
 def learning_write_approve(workspace: Path) -> ApproveFn:
-    """Policy for a background learning WRITE run: auto-allow Bash and writes
-    inside `workspace`, deny the rest. Hermetic and disposable, so it is safe unattended."""
+    """Auto-allow Bash and writes inside `workspace`, deny the rest.
+
+    Hermetic and disposable, so it is safe unattended."""
     ws = workspace.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
@@ -364,9 +361,7 @@ VET_READONLY_NUDGE = (
 )
 
 
-# Review runs at the repo root while the item's code sits unmerged in its own worktree. `git`
-# forbids one branch in two worktrees, so the root's HEAD is NEVER the item's branch: a read
-# through ambient HEAD answers about a different tree and says so nowhere.
+# Git forbids one branch in two worktrees, so the repo root's HEAD is never the item's branch.
 WRONG_TREE_NUDGE = (
     "That command reads `HEAD`, and your shell is in the repo root — which cannot have this "
     "item's branch checked out, so it would describe a different tree and tell you nothing was "
@@ -382,10 +377,9 @@ _HEAD_REV = re.compile(r"(?<![A-Za-z0-9_/-])HEAD(?![A-Za-z0-9_])")
 
 
 def reads_ambient_head(command: str) -> bool:
-    """A git read whose revision is the SHELL's HEAD rather than a named tree or revision.
+    """A git read whose revision is the shell's HEAD, not a named tree.
 
-    `HEAD` as an explicit token only: a bare `git log -5` asks about the root's history on
-    purpose, while `main...HEAD` is trying to describe the item and getting the root."""
+    Explicit `HEAD` only."""
     if not command or "HEAD" not in command:
         return False
     try:
@@ -547,21 +541,20 @@ def _path_tokens(command: str) -> list[str]:
     return out
 
 
-# `NAME=/abs/path` and nothing else: no `$(...)`, no backticks, no other name, nothing after the
-# path. Anything richer is a value this cannot know without running the shell.
-_LITERAL_ASSIGN = re.compile(r"""(?m)(?:^|(?<=[;&|\n]))\s*([A-Za-z_][A-Za-z0-9_]*)=(['"]?)(/[^\s;&|'"`$]*)\2\s*(?=$|[;&|\n])""")
+# Only a plain literal absolute path. Anything richer is a value this cannot know without running
+# the shell.
+# Absolute under either convention, like `_is_absolute_token`. Matching only `/...` left every
+# native Windows path unexpanded, so the shortcut stayed refused there.
+_ASSIGN_VALUE = r"""(?:[A-Za-z]:[\\/]|\\\\|/)[^\s;&|'"`$]*"""
+_LITERAL_ASSIGN = re.compile(r"""(?m)(?:^|(?<=[;&|\n]))\s*([A-Za-z_][A-Za-z0-9_]*)=(['"]?)("""
+                             + _ASSIGN_VALUE + r""")\2\s*(?=$|[;&|\n])""")
 _USES_NAME = r"\$\{?%s\}?"
 
 
 def _expand_literal_assignments(command: str) -> str:
-    """Substitute shell names that were assigned a LITERAL absolute path in the same command.
+    """Substitute shell names assigned a literal absolute path. For judging only, never run.
 
-    For JUDGING only — the expansion is never run. An agent naming its own long folder once and
-    reusing it was refused for the shortcut alone, while the spelled-out form was allowed.
-
-    Deliberately narrow: a value holding a command, another name, or a relative path is left
-    unexpanded, so it stays refused exactly as before. Escapes are NOT excused — the expanded text
-    goes through the same outside-the-boundary check, `../..` included."""
+    A relative or computed value stays unexpanded."""
     values: dict[str, str] = {}
     for m in _LITERAL_ASSIGN.finditer(command):
         values[m.group(1)] = m.group(3)   # a later assignment wins, which is what the shell does
@@ -570,17 +563,16 @@ def _expand_literal_assignments(command: str) -> str:
     out = command
     for name, value in values.items():
         out = re.sub(_USES_NAME % re.escape(name), value.replace("\\", "\\\\"), out)
-    # The assignment itself is inert — it names a path without touching it. Dropping it keeps a
-    # bare `NAME=/path` from reading as a verb nobody classified, and from counting as a "use" of
-    # a path the command never reaches.
+    # A literal assignment names a path without touching it, so dropping it keeps the judgment
+    # honest.
     out = _LITERAL_ASSIGN.sub(" ", out)
     return out.strip(" ;&|\n") or command
 
 
 def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
-    """True if the command EXPLICITLY scopes itself into a root.
+    """True if the command explicitly scopes itself into a root.
 
-    A command naming no absolute path stays unmatched: it resolves against a cwd this cannot see."""
+    A relative path resolves against a cwd this cannot see."""
     toks = shlex_split_safe(command)
     for i, raw in enumerate(toks[:-1]):
         if raw.strip("'\"") in ("cd", "-C"):
@@ -755,10 +747,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        protected_paths: list[Path] | None = None,
                        protected_nudge: str | None = None,
                        subagent_cap: int | None = MAX_SUBAGENTS):
-    """Wrap a surface's ApproveFn into the SDK's `can_use_tool`.
-
-    `write_boundary` prevents accidents. `sandbox_writes` hands the same roots to
-    `core.vocab.sandbox`, where an escape fails as a syscall."""
+    """`sandbox_writes` hands the same roots to `core.vocab.sandbox`, where an escape fails as
+    a syscall."""
     spawned = 0
 
     async def can_use_tool(
@@ -836,8 +826,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             if wrong_tree_nudge and reads_ambient_head(command):
                 log.info("ambient-HEAD read denied: %s", command[:200])
                 return PermissionResultDeny(message=wrong_tree_nudge)
-            # Judged on what the paths ARE, not on whether the agent spelled each one out twice.
-            # The expansion is never run; every check below still sees the real paths.
+            # Judged on the paths themselves, not on whether the agent spelled each one out twice.
             judged = _expand_literal_assignments(command)
             if is_read_only_bash(judged):
                 return PermissionResultAllow()
@@ -848,8 +837,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                     and ((cwd is not None and _in_any(cwd, reachable))
                          or _bash_scoped_into_boundary(judged, reachable))):
                 return PermissionResultAllow()
-            # Two different walls, and the agent can only act on the one it is told about:
-            # scoping the command in would work, or one named path is outside.
+            # The agent can only act on the wall it is told about.
             escaping = _bash_escaping_paths(judged, reachable) if reachable else []
             if reachable and not escaping:
                 bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
@@ -859,8 +847,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                 if scratch := _scratch_in(write_boundary):
                     bash_boundary_miss += _BASH_SCRATCH_HINT.format(scratch=scratch)
             elif escaping:
-                # NO scratch hint here — the command reaches genuinely outside, so pointing at a
-                # scratch dir is advice that cannot be followed. Naming the path is what helps.
+                # No scratch hint here. The command reaches outside, so naming the path is the
+                # only help.
                 bash_boundary_miss = _BASH_ESCAPES_BOUNDARY.format(
                     paths=", ".join(f"`{p}`" for p in escaping[:3]),
                     roots=", ".join(f"`{r}`" for r in reachable), wall=_BOUNDARY_WALL)
@@ -892,8 +880,9 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
 
     async def counted(tool_name: str, input_data: dict, context: ToolPermissionContext
                       ) -> PermissionResultAllow | PermissionResultDeny:
-        """Every refusal carries a tally. A count is the one thing the agent cannot reconstruct
-        and the kernel cannot get wrong."""
+        """Every refusal carries a tally.
+
+        A count is the one thing the agent cannot reconstruct."""
         nonlocal refused
         result = await can_use_tool(tool_name, input_data, context)
         if isinstance(result, PermissionResultDeny):

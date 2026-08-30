@@ -411,7 +411,7 @@ def test_a_literal_path_shortcut_is_seen_through():
     roots = [item]
 
     # THE CASE THIS EXISTS FOR — the command that was refused live.
-    real = (f'ITEM={item}; echo "--item--"; cat "$ITEM/item.md" 2>/dev/null; '
+    real = (f'ITEM={item.as_posix()}; echo "--item--"; cat "$ITEM/item.md" 2>/dev/null; '
             f'ls "$ITEM/artifacts"')
     ok("the shortcut is followed to its path", str(item) in _expand_literal_assignments(real))
     ok("...so the read reads as read-only", is_read_only_bash(_expand_literal_assignments(real)))
@@ -420,7 +420,7 @@ def test_a_literal_path_shortcut_is_seen_through():
     ok("...and it does not escape", not _bash_escaping_paths(_expand_literal_assignments(real), roots))
 
     # CONTROL 1 — walking back out of the boundary must still escape.
-    out = f'ITEM={item}; cat "$ITEM/../../../etc/passwd"'
+    out = f'ITEM={item.as_posix()}; cat "$ITEM/../../../etc/passwd"'
     ok("a shortcut walked back OUT of the boundary still escapes",
        bool(_bash_escaping_paths(_expand_literal_assignments(out), roots)))
     ok("...and is not read as scoped in",
@@ -438,9 +438,9 @@ def test_a_literal_path_shortcut_is_seen_through():
     ok("a relative shortcut is not followed", "$ITEM" in _expand_literal_assignments(rel))
 
     # CONTROL 4 — the last assignment wins, and an unassigned name stays unexpanded.
-    two = f'ITEM=/tmp/other; ITEM={item}; cat "$ITEM/f"'
+    two = f'ITEM=/tmp/other; ITEM={item.as_posix()}; cat "$ITEM/f"'
     ok("a reassigned shortcut takes its LAST value",
-       _expand_literal_assignments(two).rstrip().endswith(f'cat "{item}/f"'))
+       _expand_literal_assignments(two).rstrip().endswith(f'cat "{item.as_posix()}/f"'))
     ok("a name that was never assigned is left alone",
        "$NOPE" in _expand_literal_assignments('cat "$NOPE/f"'))
 
@@ -451,15 +451,24 @@ def test_a_literal_path_shortcut_is_seen_through():
 
     # CONTROL 6 — the one place this LOOSENS: an assignment naming an outside path that the
     # command never uses. Naming a path is not touching it, so this is allowed on purpose.
-    unused = f'P=/etc; cat {item}/f'
+    unused = f'P=/etc; cat {item.as_posix()}/f'
     ok("an outside path that is assigned but never used no longer blocks the command",
        not _bash_escaping_paths(_expand_literal_assignments(unused), roots))
     ok("...but the moment it IS used, it escapes again",
        bool(_bash_escaping_paths(_expand_literal_assignments(f'P=/etc; cat "$P/passwd"'), roots)))
 
     # CONTROL 7 — `${ITEM}` is the same shortcut as `$ITEM`.
-    braced = f'ITEM={item}; cat "${{ITEM}}/item.md"'
-    ok("the braced form is followed too", str(item) in _expand_literal_assignments(braced))
+    braced = f'ITEM={item.as_posix()}; cat "${{ITEM}}/item.md"'
+    ok("the braced form is followed too", item.as_posix() in _expand_literal_assignments(braced))
+
+    # CONTROL 8 — the other two absolute conventions. A shortcut holding a native Windows path
+    # was left unexpanded, so on that platform the whole allowance did nothing.
+    for shape in ('ITEM=C:\\Users\\me\\item; cat "$ITEM/f.md"',
+                  'ITEM=\\\\share\\wt; cat "$ITEM/f.md"'):
+        ok(f"a drive or UNC shortcut is followed: {shape[:16]}",
+           "$ITEM" not in _expand_literal_assignments(shape))
+    ok("a relative Windows shortcut is still not followed",
+       "$ITEM" in _expand_literal_assignments('ITEM=..\\rel; cat "$ITEM/f"'))
 
 
 def main() -> None:
