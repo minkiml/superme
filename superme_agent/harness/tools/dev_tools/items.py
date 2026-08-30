@@ -249,6 +249,62 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
     return write_checkpoint
 
 
+class ReadItemDiffArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id whose branch to read"]]
+    path: Annotated[str, ((((("one file or directory to show the patch for. Omit it for the "
+                              "whole branch")))))]
+
+
+def _read_item_diff(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def read_item_diff(args: dict) -> dict:
+        from pathlib import Path
+        from ....core import git_layer as _gl
+        from ....core.dev_knowledge import parse_md
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        meta, _body = parse_md((d / "item.md").read_text(encoding="utf-8"))
+        wt, base = meta.get("git_worktree"), meta.get("git_base")
+        if not wt or not Path(str(wt)).is_dir():
+            return _err("This item has no live worktree, so it has no branch to read — nothing "
+                        "was built, or it merged and the tree was removed.")
+        if not base:
+            return _err("This item's record carries no `git_base`, so there is nothing to diff "
+                        "against. Report it rather than guessing a base.")
+        path = _s(args, "path")
+        try:
+            r = _gl.item_diff(Path(str(wt)), str(base), path=path)
+        except (_gl.GitError, _gl.GitBusy) as e:
+            return _err(str(e))
+        st = r["stat"]
+        head = [f"### `{r['branch']}` at {r['head']} vs base `{r['base']}`"]
+        if r["commits"]:
+            head.append(f"\n**{len(r['commits'])} commit(s)**\n"
+                        + "\n".join(f"- {c}" for c in r["commits"][:20]))
+        if r["dirty"]:
+            head.append(f"\n**Uncommitted in the worktree ({len(r['dirty'])}):** "
+                        + ", ".join(r["dirty"][:10])
+                        + "\nWork that is not committed is not in the diff below, and will not "
+                          "merge.")
+        if not st["files"]:
+            head.append(f"\n**No changes{f' under `{path}`' if path else ''}.** This branch and "
+                        f"its base are identical there. That is the reading — do not go looking "
+                        f"for the diff somewhere else.")
+            return _ok("\n".join(head))
+        head.append(f"\n**{st['files']} file(s), +{st['insertions']} −{st['deletions']}**\n"
+                    + "\n".join(f"- `{f['path']}` +{f['plus']} −{f['minus']}"
+                                 for f in st["by_file"][:60]))
+        head.append("\n```diff\n" + r["patch"].rstrip() + "\n```")
+        if r["truncated"]:
+            head.append("The patch above was cut at the size cap. Pass `path` to read one file or "
+                        "directory in full.")
+        return _ok("\n".join(head))
+    return read_item_diff
+
+
 class SyncFromAnchorBranchArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, ((((("the work-item id. It must have a live worktree, so this "
                                           "is build only")))))]]

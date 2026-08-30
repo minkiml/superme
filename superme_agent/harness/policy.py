@@ -31,6 +31,7 @@ SAFE_TOOLS = {
     "mcp__dev__read_verification_library",
     "mcp__dev__read_decisions",
     "mcp__dev__read_research_proposals",
+    "mcp__dev__read_item_diff",
     # The one exemption to the general-session guardrail. These can touch nothing but the inbox.
     "mcp__dev__create_inbox_item",
     "mcp__dev__append_inbox_item",

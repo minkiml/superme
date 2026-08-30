@@ -47,7 +47,8 @@ EXPECTED: dict[str, set[str]] = {
               "create_inbox_item", "file_phase_report"},
     "vet": {"record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"},
-    "review": {"scaffold_artifact", "file_phase_report", "read_decisions"},
+    # `read_item_diff` because a shell git command at the repo root cannot see the item's branch.
+    "review": {"scaffold_artifact", "file_phase_report", "read_decisions", "read_item_diff"},
     "close": {"apply_knowledge_edits", "read_verification_library", "create_inbox_item",
               "file_phase_report"},
     "investigate": {"scaffold_artifact", "write_checkpoint", "file_phase_report",

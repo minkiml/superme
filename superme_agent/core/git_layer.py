@@ -49,6 +49,33 @@ def diff_numstat(worktree: Path, base: str) -> dict:
     return _parse_numstat(proc.stdout if proc.returncode == 0 else "")
 
 
+def item_diff(worktree: Path, base: str, *, path: str | None = None,
+              char_cap: int = 24000) -> dict:
+    """One item branch's own diff, read INSIDE its worktree.
+
+    `base...HEAD` names the item's branch only where HEAD is the item's branch — true in the
+    worktree, and never in the repo root, which cannot have that branch checked out."""
+    state = check_git_state(worktree)
+    scope = ["--", path] if path else []
+    proc = _git(worktree, "diff", f"{base}...HEAD", *scope, check=False)
+    if proc.returncode != 0:
+        raise GitError(f"git diff {base}...HEAD failed in {worktree}: "
+                       f"{proc.stderr.strip() or proc.stdout.strip()}")
+    patch = proc.stdout
+    log = _git(worktree, "log", "--oneline", "--no-decorate", f"{base}..HEAD", check=False)
+    stat = _git(worktree, "diff", "--numstat", f"{base}...HEAD", *scope, check=False)
+    return {
+        "branch": state.get("branch"),
+        "head": (state.get("head") or "")[:10],
+        "base": base,
+        "dirty": state.get("dirty") or [],
+        "commits": [ln for ln in log.stdout.splitlines() if ln.strip()],
+        "stat": _parse_numstat(stat.stdout if stat.returncode == 0 else ""),
+        "patch": patch[:char_cap],
+        "truncated": len(patch) > char_cap,
+    }
+
+
 # Temporary instrumentation carries a tag so removal is a grep, not a memory.
 DEBUG_TAG = re.compile(r"\[DEBUG-[0-9a-fA-F]{4,}\]")
 

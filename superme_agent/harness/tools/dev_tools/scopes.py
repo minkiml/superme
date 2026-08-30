@@ -9,9 +9,10 @@ from .learning import (DevLogArgs, DropCandidatesArgs, FileCandidateArgs, MergeP
 from .inbox import (AppendInboxItemArgs, CreateInboxItemArgs, InboxArgs, ItemizeAndLaunchArgs,
                     PushInboxItemArgs, _append_inbox_item, _create_inbox_item,
                     _itemize_and_launch, _list_inbox, _push_inbox_item)
-from .items import (ScaffoldArtifactArgs, SetTriageClassificationArgs,
-                    SyncFromAnchorBranchArgs, WriteCheckpointArgs, _scaffold_artifact,
-                    _set_triage_classification, _sync_from_anchor_branch, _write_checkpoint)
+from .items import (ReadItemDiffArgs, ScaffoldArtifactArgs, SetTriageClassificationArgs,
+                    SyncFromAnchorBranchArgs, WriteCheckpointArgs, _read_item_diff,
+                    _scaffold_artifact, _set_triage_classification, _sync_from_anchor_branch,
+                    _write_checkpoint)
 from .verification import (CheckPlanCommandsArgs, NominateCheckArgs, ReadVerificationLibraryArgs,
                            RecordDiagnosisArgs, RecordLensArgs, RecordValidationArgs,
                            RecordVerificationArgs, _check_plan_commands, _nominate_check,
@@ -96,6 +97,14 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
         "check instead of authoring one. Do not use it to add an entry: that is `nominate_check`. "
         "Returns the standing and available entries with their ids.",
         ReadVerificationLibraryArgs, _read_verification_library,
+    ),
+    ToolSpec(
+        "read_item_diff",
+        "Reads what an item's branch actually changed, from inside its own worktree. Use it for "
+        "every diff, commit list and file count you report. A git command in your own shell "
+        "answers about the repo root, which is never this item's branch. Do not use it to edit or "
+        "merge. Returns the commits, per-file counts and the patch.",
+        ReadItemDiffArgs, _read_item_diff,
     ),
     ToolSpec(
         "read_decisions",
@@ -359,7 +368,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
               "create_inbox_item", "file_phase_report"),
     "vet": ("record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"),
-    "review": ("scaffold_artifact", "read_decisions", "file_phase_report"),
+    "review": ("scaffold_artifact", "read_decisions", "read_item_diff", "file_phase_report"),
     "close": ("apply_knowledge_edits", "read_verification_library", "create_inbox_item",
               "file_phase_report"),
     "investigate": ("scaffold_artifact", "write_checkpoint", "read_decisions",

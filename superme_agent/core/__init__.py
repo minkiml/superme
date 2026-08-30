@@ -8,6 +8,7 @@ from .vocab.context import Context
 from .vocab.events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import (
     ApproveFn, build_can_use_tool, scoped_writes_approve, deny_all, learning_write_approve,
+    WRONG_TREE_NUDGE,
     PLAN_READONLY_NUDGE,
     VET_READONLY_NUDGE,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "ApproveFn",
     "build_can_use_tool",
     "scoped_writes_approve",
+    "WRONG_TREE_NUDGE",
     "deny_all",
     "learning_write_approve",
     "PLAN_READONLY_NUDGE",
