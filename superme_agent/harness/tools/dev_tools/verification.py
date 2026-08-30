@@ -1,6 +1,8 @@
 """Recording evidence: a validation run, a verification, a diagnosis, a lens."""
 
 import asyncio
+import re
+import tempfile
 from typing import Annotated, Literal, Required, TypedDict
 
 from .render import _err, _ok, _s
@@ -34,13 +36,25 @@ def _plan_coverage(item_dir, kind: str | None) -> str:
 _ABS_TOKEN = r"(?<![\w=])(?:[A-Za-z]:[\\/][^\s'\"|;&)]*|\\\\[^\s'\"|;&)]+|/[^\s'\"|;&)]+)"
 _SYSTEM_ROOTS = ("/dev/", "/tmp/", "/var/folders/", "/private/tmp/", "/usr/", "/etc/", "/bin/",
                  "/sbin/", "/opt/", "/proc/")
+# The same exemption on Windows, or the platform's own temp dir reads as another checkout.
+_WIN_SYSTEM = re.compile(r"^(?:[a-z]:)?/(?:windows|temp)/|/appdata/local/temp/|/_temp/")
+
+
+def _is_system_path(tok: str) -> bool:
+    """A path belonging to the machine rather than to any checkout."""
+    if tok.startswith(_SYSTEM_ROOTS):
+        return True
+    norm = tok.replace("\\", "/").lower()
+    if _WIN_SYSTEM.search(norm):
+        return True
+    # The live temp dir answers for whatever this host actually uses.
+    return norm.startswith(tempfile.gettempdir().replace("\\", "/").lower().rstrip("/") + "/")
 
 
 def _stray_run_blocks(item_dir, repo_dir) -> str:
     """`run:` blocks that leave this item's worktree.
 
     One that `cd`s to the primary checkout comes back green."""
-    import re
     from pathlib import Path as _P
     from ....core import artifacts as _arts
     plan_path = _P(item_dir) / "artifacts" / _arts.artifact_file("plan")
@@ -67,7 +81,7 @@ def _stray_run_blocks(item_dir, repo_dir) -> str:
                 bad.append(f"{c.get('id') or '?'}: `cd` — {line.strip()[:70]}")
                 continue
             for tok in re.findall(_ABS_TOKEN, line):
-                if tok.startswith(_SYSTEM_ROOTS) or any(norm(tok).startswith(r) for r in roots):
+                if _is_system_path(tok) or any(norm(tok).startswith(r) for r in roots):
                     continue
                 bad.append(f"{c.get('id') or '?'}: absolute path — {tok[:60]}")
                 break

@@ -1,5 +1,6 @@
 """What a run leaves behind: its prompt, its reply, and one row per tool call."""
 
+import re
 import json as _json
 
 from ...app_state import agent as _agent, dev as _dev, spine as _spine
@@ -14,7 +15,7 @@ from .lifecycle import log
 def _short_path(p, keep: int = 4) -> str:
     """The last `keep` segments of a path, `…/`-prefixed when elided. The UI truncates the tail, so
     keep the meaningful end."""
-    parts = [x for x in str(p or "").split("/") if x]
+    parts = [x for x in re.split(r"[\\/]", str(p or "")) if x]
     if not parts:
         return ""
     return "/".join(parts) if len(parts) <= keep else "…/" + "/".join(parts[-keep:])

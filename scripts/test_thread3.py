@@ -624,6 +624,16 @@ depth: checks
     ok("a relative command is still clean against a Windows worktree",
        not wfires("pytest -k quiet_sum"))
 
+    # The exemption has to know both conventions, or the platform's own temp dir reads as another
+    # checkout.
+    ok("the Windows system root is exempt", not wfires(r"pytest > C:\Windows\Temp\out.txt"))
+    ok("the Windows user temp dir is exempt",
+       not wfires(r"pytest > C:\Users\me\AppData\Local\Temp\out.txt"))
+    ok("the CI runner temp dir is exempt", not wfires(r"pytest > D:\a\_temp\out.txt"))
+    ok("a POSIX temp path is still exempt", not wfires("pytest > /tmp/out.txt"))
+    ok("...but another checkout on a Windows drive still fires",
+       wfires(r"pytest C:\Users\me\Developer\test-playground\tests\t.py"))
+
     # A helper nobody calls is a detector that never fires — pin the wiring, not just the logic.
     src_txt = Path("superme_agent/harness/tools/dev_tools/verification.py").read_text(
         encoding="utf-8")
