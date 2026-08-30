@@ -63,8 +63,7 @@ def _type_schema(py_type: Any) -> dict[str, Any]:
 
 
 def _render_schema(schema: type | dict[str, Any]) -> dict[str, Any]:
-    """A ToolSpec schema as the JSON-Schema dict the SDK tool will carry: TypedDicts rendered
-    (Literal → enum), ready-made dicts passed through."""
+    """A ToolSpec schema as the JSON-Schema dict the SDK tool will carry."""
     if isinstance(schema, dict):
         return schema
     hints = get_type_hints(schema, include_extras=True)
@@ -95,10 +94,7 @@ def spec_schema(spec: "ToolSpec") -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """One tool: description, typed schema, and a deps-bound handler factory.
-
-    An agent routes on the `description`: what the tool achieves, when to use it, what it
-    will NOT do."""
+    """One tool: description, typed schema, and a deps-bound handler factory."""
 
     name: str
     description: str                       # what it achieves · when to use it · what it won't do
@@ -118,11 +114,7 @@ def _kind(prop: dict[str, Any]) -> str:
 
 
 def describe_specs(specs: list[ToolSpec]) -> str:
-    """The authored tool surface as readable text, in mount order.
-
-    For READING, not for costing: Claude Code sends only the tool names and holds these schemas
-    until an agent fetches one with `ToolSearch`. A long description is paid by the run that asks
-    for it, not by every request."""
+    """The authored tool surface as readable text, in mount order."""
     blocks: list[str] = []
     for s in specs:
         schema = spec_schema(s)
@@ -147,9 +139,7 @@ def describe_specs(specs: list[ToolSpec]) -> str:
 
 
 def build_mcp_server(name: str, specs: list[ToolSpec], *, version: str = "1.0.0", **deps):
-    """Render `specs` into an SDK MCP server, binding each handler to the shared `deps`.
-
-    Unknown deps are ignored by the factories, so callers can pass a superset."""
+    """Render `specs` into an SDK MCP server, binding each handler to the shared `deps`."""
     tools = [tool(s.name, s.description, spec_schema(s))(s.build(**deps))
              for s in specs]
     return create_sdk_mcp_server(name=name, version=version, tools=tools)

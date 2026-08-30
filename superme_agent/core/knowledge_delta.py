@@ -76,8 +76,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         if not section:
             issues.append(f"{tag}: missing section")
         elif section not in (heads := _sections(p.read_text(encoding="utf-8"))):
-            # Carrying the `##` through is the one miss that happens, so name it rather than
-            # echoing '## ## Heading' back and leaving the agent to guess.
+            # Carrying the `##` through is the one miss that happens, so name it.
             if (bare := section.lstrip("#").strip()) in heads:
                 issues.append(f"{tag}: pass the section as '{bare}', without the '##' marker")
             else:

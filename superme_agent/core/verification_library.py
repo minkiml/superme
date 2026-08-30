@@ -202,8 +202,9 @@ def _rewrite(dev_root: Path, entry_id: str, tier: str | None) -> bool:
 
 
 def move_entry(dev_root: Path, entry_id: str, tier: str) -> bool:
-    """Promote to standing or demote to available. The only path to standing, since nothing in the
-    loop may tax every future item."""
+    """Promote to standing or demote to available.
+
+    The only path to standing."""
     if tier not in TIERS:
         raise ValueError(f"tier must be one of {'/'.join(TIERS)} (got {tier!r})")
     return _rewrite(dev_root, entry_id, tier)

@@ -43,9 +43,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
                      spent: int, budget: int, turn_error: bool = False,
                      faults: int = 0, fault_reason: str = "", lens_gaps: list[dict] | None = None,
                      audit_gaps: list[dict] | None = None) -> dict:
-    """The driver's decision function, PURE so every branch is unit-testable.
-
-    An item never rests inside build⟷vet, which has no decision surface. `error` is not resting."""
+    """The driver's decision function, pure so every branch is unit-testable."""
     # The driver continues ONLY an active item; a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
     if item.get("done_at") or status != "active":
@@ -128,9 +126,9 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
 
 
 def decide_after_build(item: dict, *, outcome: str | None, turn_error: bool) -> dict:
-    """The build-cycle exit decision, PURE. A build never pages mid-loop.
+    """The build-cycle exit decision, pure.
 
-    `needs_user` is the exception, because riding to review rests on the work being ON THE BRANCH."""
+    A build never pages mid-loop."""
     moved_away = (bool(item.get("done_at")) or str(item.get("status")) != "active"
                   or str(item.get("phase")) != "build")
     if moved_away:
@@ -148,8 +146,7 @@ def decide_after_build(item: dict, *, outcome: str | None, turn_error: bool) -> 
 # --------------------------------------------------------------------------- shared plumbing
 
 def _cas_phase(dev_root: Path, item_id: str, frm: str, to: str) -> bool:
-    """Compare-and-swap the item's phase: re-read, write only if it still reads `frm`. Synchronous
-    throughout, so it is atomic under the single asyncio loop."""
+    """Compare-and-swap the item's phase: re-read, write only if it still reads `frm`."""
     cur = _dev.read_work_item(dev_root, item_id) or {}
     if str(cur.get("phase")) != frm:
         return False
@@ -175,17 +172,13 @@ def _resolve_run_params(context_id: str, item: dict) -> tuple[str, str]:
 
 
 def _resolve_vet_params(context_id: str, item: dict) -> tuple[str, str]:
-    """(model, effort) for a VET run: its own chain, not the item's or the project's.
-
-    Inheriting build's tier would move the check with the thing it checks."""
+    """Model and effort for a vet run, from its own chain."""
     return (_spine.role_model(context_id, "vet", item_model=item.get("vet_model")),
             _spine.role_effort(context_id, "vet", item_effort=item.get("vet_effort")))
 
 
 def dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
-    """The dev MCP server for a background loop run, `repo_dir` at the worktree.
-
-    So evidence fingerprints the vetted tree, and `scope` is the phase this run IS."""
+    """The dev MCP server for a loop run, `repo_dir` at the worktree."""
     return {"dev": make_dev_mcp_server(
         _dev_store, ctx.id, spine=_spine, scope=scope,
         dev_root=ctx.internal_root / "dev",
@@ -206,9 +199,7 @@ def _log_decision(context_id: str, item_id: str, cycle: int, d: dict) -> None:
 
 
 def _tree_moved_since_evidence(item_dir: Path, wt) -> bool:
-    """Has the worktree changed since the last evidence entry?
-
-    True when there is no evidence yet, so the opening cycle is always vetted."""
+    """Has the worktree changed since the last evidence entry?"""
     entries = _arts.evidence_entries(item_dir)
     last = next((str(e.get("fingerprint") or "") for e in reversed(entries) if e.get("fingerprint")), "")
     if not last or last == "no-git":
@@ -217,10 +208,9 @@ def _tree_moved_since_evidence(item_dir: Path, wt) -> bool:
 
 
 def _plan_moved_since_evidence(item_dir: Path) -> bool:
-    """Has the plan been REVISED since the last verdict?
+    """Has the plan been revised since the last verdict?
 
-    Vet grades the tree against the plan, so the verdict has two inputs where the fingerprint sees
-    one."""
+    Vet grades the tree a plan describes."""
     entries = _arts.evidence_entries(item_dir)
     if not entries:
         return True
@@ -229,8 +219,7 @@ def _plan_moved_since_evidence(item_dir: Path) -> bool:
 
 
 def _exit_no_progress(ctx, context_id: str, item_id: str, dev_root: Path, item_dir: Path) -> None:
-    """Flip vet → review and hand the item over WITHOUT spending a vet run. Records the same cycle
-    outcome and decision event as any other exit."""
+    """Flip vet to review and hand the item over without spending a vet run."""
     d = {"action": "review", "status": "awaiting_human", "record": True, "exit": "no_progress",
          "reason": "the build cycle changed nothing in the tree — no point vetting the same code "
                    "again; handing it to you"}
@@ -256,8 +245,7 @@ def _exit_no_progress(ctx, context_id: str, item_id: str, dev_root: Path, item_d
 
 
 def _fault_retries(context_id: str, item_id: str, cycle: int) -> int:
-    """How many times THIS cycle was retried after a SuperMe fault — read back from the decision
-    trail, so a daemon restart cannot reset the counter."""
+    """How many times this cycle was retried after a SuperMe fault."""
     try:
         rows = _dev_store.list_events(context_id, item_id=item_id, limit=40)
     except Exception:
@@ -271,9 +259,9 @@ def _fault_retries(context_id: str, item_id: str, cycle: int) -> int:
 # --------------------------------------------------------------------------- vet runs
 
 def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """Start one background vet run, the loop's DECISION hop.
+    """Start one vet run, the loop's decision hop.
 
-    Retires any previous vet thread first: vet forgets, fresh eyes every cycle."""
+    Retires any previous thread."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     if not item:
@@ -297,8 +285,7 @@ def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
 
 async def _run_background_vet(ctx, context_id: str, item_id: str,
                             model: str, effort: str) -> None:
-    """Drive one fresh background vet turn at the item's worktree, then hand the outcome to the
-    driver. Read-only on files, with the freeze-boundary shell. Always a fresh session."""
+    """One fresh vet turn at the item's worktree, then hand the outcome on."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     lc = _loop_ctx(ctx, item)
@@ -490,9 +477,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
 # --------------------------------------------------------------------------- build cycles
 
 def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """Start the loop's OPENING build cycle, where the work order is the plan, not a vet report.
-
-    Nothing is implemented yet, so vetting an empty tree would be wasted."""
+    """Start the loop's opening build cycle, where the work order is the plan."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     if not item:
@@ -540,9 +525,7 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
 
 async def _run_background_build(ctx, context_id: str, item_id: str,
                               model: str, effort: str, *, trigger: str | None = None) -> None:
-    """Drive one background build turn in the worktree, then flip to vet and fire its run.
-
-    RESUMES the item's build thread, because build remembers."""
+    """One build turn in the worktree, then flip to vet and fire it."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     lc = _loop_ctx(ctx, item)
@@ -566,9 +549,8 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         found.update({f"the {g['lens']} lens": {"where": f"{g['severity']} finding",
                                                 "why": g["text"]}
                       for g in _arts.lens_gaps(item_dir)})
-        # The server note rode the ENTRY trigger only, because build resumes its own thread and
-        # would otherwise be told twice. Restate it exactly when that turn may be gone: a
-        # compaction cut it, or there is no thread to resume.
+        # The server note rode the entry trigger only, so a build that resumed its own thread
+        # never saw it.
         restate_env = (bool(compacted) or not prev_build) and bool(
             getattr(_spine.repos().get(context_id), "vet_env", None))
         trigger = kernel_speech.build_loop_trigger(item_id, title, report["cycle"], report["text"],
@@ -713,9 +695,9 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
 
 def grant_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                         by: str) -> tuple[bool, str]:
-    """Record a GRANT on a pending authorization. It routes nothing.
+    """Record a grant on a pending authorization.
 
-    Shared by the owner's action and the deputy's delegated grant, which enforces delegation first."""
+    It routes nothing."""
     dev_root = ctx.internal_root / "dev"
     item_dir = dev_root / "work-items" / item_id
     auth = _arts.resolve_authorization(item_dir, auth_id, decision="granted", by=by)

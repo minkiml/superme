@@ -32,9 +32,7 @@ def _int_or_none(value) -> int | None:
 
 
 def _artifact_payload(tool_name: str, ti: dict) -> str | None:
-    """The row's full text, for rows where the TEXT is audited.
-
-    Only a sub-agent's brief today, because a spawned worker inherits nothing."""
+    """The row's full text, for rows where the text is audited."""
     if tool_name in ("Task", "Agent"):
         return str(ti.get("prompt") or "") or None
     return None
@@ -103,8 +101,7 @@ _RESULT_CAP = 1200   # a tool's output, trimmed — enough to show what it retur
 
 
 def _result_row(ev: ToolResult) -> tuple[str, str]:
-    """Map a ToolResult to (name, description). Its `tool_id` pairs it back to the call, since
-    concurrent tools return out of order."""
+    """Map a ToolResult to name and description."""
     _, head, detail = _artifact_desc(ev.tool_name, {})
     name = detail or head
     body = (ev.content or "").strip()
@@ -127,9 +124,7 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
                  mcp: list[str] | None = None, write_boundary: list | None = None,
                  sandbox_writes: list | None = None, read_only: bool = False,
                  approve: str = "denied", resumes: bool = False) -> dict:
-    """What the turn is ALLOWED to do: a run's input that is not prose.
-
-    Two runs can carry the same words and behave differently because one could run a shell."""
+    """What the turn is allowed to do: a run's input that is not prose."""
     return {"model": model or "", "effort": effort or "",
             "mcp": sorted(mcp or []),
             "write_boundary": [str(p) for p in (write_boundary or [])],
@@ -140,7 +135,7 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
 def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict:
     """`turn_surface` read off the kwargs a turn is actually sent with.
 
-    A restatement can be wrong: one run recorded a boundary the stream below it never passed."""
+    A restatement could drift from the send."""
     return turn_surface(
         model=turn_kwargs.get("model"),
         effort=turn_kwargs.get("effort"),
@@ -153,12 +148,9 @@ def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dic
 
 
 def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
-    """The prompt text SuperMe authors outside the system append: the phase SKILL.md and its tools.
+    """The prompt text SuperMe authors outside the system append.
 
-    The skill enters the transcript and is re-read every request. The tools are NOT: Claude Code
-    puts their NAMES in the prefix and holds the schemas server-side, so an agent that wants one
-    fetches it with `ToolSearch`. Measured at ~15 tokens per tool, against ~280 for its schema.
-    So the two are reported apart — only the names are charged to every request."""
+    The phase skill and the tool schemas, which no message carries."""
     from ....harness.tools.base_tools import BASE_TOOLS
     from ....harness.tools.dev_tools import dev_tool_specs
     from ....harness.tools.registry import describe_specs
@@ -200,9 +192,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
 def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | None,
                       prompt: str, background: bool, phase: str | None,
                       surface: dict | None = None) -> None:
-    """Persist the ACTUAL input a run is about to send, keyed to the live run.
-
-    Called only for throwaway prompt-extraction items, so `run_input` stops growing per-run."""
+    """Persist the actual input a run is about to send, keyed to the live run."""
     try:
         info = _spine.live_run(context_id, item_id)
         rid = (info or {}).get("id")
@@ -212,9 +202,7 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | Non
         # `item_bound=True` changes what the operating-context fragment renders; without it the
         # preview shows a prompt no run sent.
         system_prompt = _agent.assemble_system_append(ctx, item_bound=True)
-        # Provenance for both channels from the same builder: the system-channel fragments sum to
-        # `system_prompt`, the turn-channel one opens `prompt_body`.
-        # Guarded: a hiccup must not lose the capture.
+        # Both channels come from one builder, so the fragments sum to what was sent.
         try:
             frags = _agent.assemble_system_fragments(ctx, preamble=preamble, item_bound=True)
             fragments_json = _json.dumps(frags, ensure_ascii=False)
@@ -232,9 +220,8 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | Non
         _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
                                 feature=PROMPT_EXTRACTION_FEATURE, background=background,
                                 system_prompt=system_prompt,
-                                # The preamble is not in the append — it rides the turn, so
-                                # the body recorded is the COMPOSED message, from the same
-                                # function the real turn calls.
+                                # The preamble rides the turn, so the body recorded is the
+                                # composed message.
                                 prompt_body=_agent.compose_prompt(preamble, prompt),
                                 system_fragments=fragments_json, authored_extras=extras_json,
                                 turn_surface=(_json.dumps(surface, ensure_ascii=False)
@@ -245,9 +232,7 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, preamble: str | Non
 
 def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
                   publish_live: bool = True) -> None:
-    """Record one turn event onto a run's trail and publish it to any watching panel.
-
-    NEVER RAISES: this runs inside the run's own task, so anything escaping kills the WORK."""
+    """Record one turn event onto a run's trail and publish it to any watching panel."""
     try:
         _capture_event(repo_id, ev, run_id=run_id, item_id=item_id, publish_live=publish_live)
     except Exception:

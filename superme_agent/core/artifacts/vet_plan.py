@@ -127,9 +127,7 @@ WHOLE_SUITE_IS_BUILDS = "`run:` is the project's whole test suite, which is BUIL
 
 
 def vet_plan_hard_issues(vp: dict) -> list[str]:
-    """The gate-blocking structural rules, every one mechanically decidable.
-
-    A missing `covers` costs a join; a missing `proves` means nobody can say what a green MEANS."""
+    """The gate-blocking structural rules, every one mechanically decidable."""
     if not vp.get("present"):
         return ["missing required section '## Verification plan'"]
     issues: list[str] = []
@@ -194,13 +192,12 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
     return issues
 
 
-# A check depending on a RETIRED read-only doc can never go green. Match the filename precisely.
+# A check depending on a retired read-only doc can never go green. Match the filename precisely.
 _RETIRED_DOC_REF = re.compile(r"\bspec\.md\b", re.I)
 
 
 def vet_plan_soft_flags(vp: dict) -> list[str]:
-    """The judgment flags — surfaced in the gate brief, never blocking: a vague
-    `expect`, a mechanism-worded `proves`, a retired-doc target."""
+    """The judgment flags, surfaced in the gate brief and never blocking."""
     flags: list[str] = []
     for c in vp.get("checks", []):
         exp, cid = c.get("expect", ""), c.get("id") or "(unnamed)"
@@ -208,7 +205,7 @@ def vet_plan_soft_flags(vp: dict) -> list[str]:
         # wrong author.
         if c.get("source") == "library":
             continue
-        # Retired-doc scan across the whole check (traces/scenario/expect) — a check that can't pass.
+        # Retired-doc scan across the whole check. Such a check cannot pass.
         blob = " ".join(str(c.get(f) or "") for f in ("traces", "scenario", "expect"))
         if _RETIRED_DOC_REF.search(blob):
             flags.append(f"{cid}: targets the RETIRED doc spec.md (read-only) — this check can't "
@@ -256,8 +253,9 @@ def _is_legacy_plan(sections: dict) -> bool:
 
 
 def _plan_check_ids(item_dir: Path) -> set[str] | None:
-    """The CURRENT vet plan's check ids. None when there is nothing to scope by, and the
-    caller then reads the whole ledger."""
+    """The current vet plan's check ids.
+
+    None when there is nothing to scope by."""
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return None
@@ -266,9 +264,7 @@ def _plan_check_ids(item_dir: Path) -> set[str] | None:
 
 
 def plan_vet_depth(item_dir: Path) -> str:
-    """The plan's declared vet depth, or `""` when there is no plan to read.
-
-    `none` is the owner-approved judgment that nothing here is observable, never vet's call."""
+    """The plan's declared vet depth, or empty when there is no plan to read."""
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return ""

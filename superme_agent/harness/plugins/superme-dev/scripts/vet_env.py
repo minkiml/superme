@@ -1,9 +1,4 @@
-"""Boot a server running THIS WORKTREE's code, so a check cannot ask one serving another.
-
-    eval "$(bash vet_env.sh start)"     # exports the repo's URL variable
-    bash vet_env.sh stop                # ALWAYS, including after a failure
-
-Python, not shell: Windows has no `lsof`, and its `ps` and `kill` see another process table.
+"""Boot a server running this worktree's code, so a check cannot ask one serving another.
 """
 
 import json
@@ -99,9 +94,7 @@ def answers(url: str) -> bool:
 
 
 def link_env(wt: Path, main: Path) -> None:
-    """Link the main checkout's .env in, so a server needing credentials can authenticate.
-
-    Windows refuses a symlink without developer mode, so there it copies and says so."""
+    """Link the main checkout's .env in, so a server needing credentials can authenticate."""
     if (wt / ".env").exists() or not (main / ".env").is_file():
         return
     try:
@@ -200,8 +193,9 @@ def _kill(pid: int) -> None:
 
 
 def port_of(pid: int, wt: Path) -> str:
-    """The port this server listens on, asked of the OS first — a state file can outlive the run
-    that wrote it. Empty when neither can say."""
+    """The port this server listens on, asked of the OS first.
+
+    A state file can outlive the run."""
     try:
         r = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-p", str(pid), "-Fn"],
                            capture_output=True, text=True, timeout=10, encoding="utf-8")

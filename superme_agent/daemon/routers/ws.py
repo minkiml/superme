@@ -63,9 +63,9 @@ def _norm_cwd(p) -> str:
 
 
 def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) -> tuple[str, str | None]:
-    """The explicit phase-to-session map: which session a bound turn runs in.
+    """Which session a bound turn runs in.
 
-    None means this turn mints. Other phases' threads are left alone."""
+    None means mint a fresh one."""
     phase = str(item.get("phase") or "triage")
     slot = kind_profiles.session_slot(phase)
     slots = item.get("sessions") or {}
@@ -92,14 +92,12 @@ def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) 
 def _live_resume(msg_resume: str | None, resumed: dict | None) -> str | None:
     """The resume sid a turn may actually use.
 
-    A client resume resolving to no stored row is DANGLING, and handing it to the CLI hard-fails the
-    turn."""
+    A client resume resolving to no stored row is dropped."""
     return msg_resume if (msg_resume and resumed is not None) else None
 
 
 def _latest_report_outcome(context_id: str, item_id: str) -> str | None:
-    """The item's newest `run.report` outcome, or None. The grill detector keys on this: `needs_user`
-    means the plan agent is parked on its questions."""
+    """The item's newest run-report outcome, or None."""
     try:
         for e in _dev_store.list_events(context_id, item_id=item_id, limit=25):
             if str(e.get("kind")) == "run.report":
@@ -110,8 +108,7 @@ def _latest_report_outcome(context_id: str, item_id: str) -> str | None:
 
 
 def _compact_reply(verdict: dict | None) -> str:
-    """The owner's answer to a manual `/compact` — the one owner-facing sentence compaction has. The
-    numbers are the verdict event's own."""
+    """The owner's answer to a manual compact, the one owner-facing sentence."""
     if not verdict:
         return ("Nothing to compact — this session has no fill on record yet, or it has already "
                 "backed off from compacting (two ineffective attempts).")
@@ -204,8 +201,7 @@ async def ws_agent(ws: WebSocket) -> None:
     #                                   OK's a KIND of call, later calls of that kind don't re-ask.
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
-        """The daemon's ApproveFn: round-trip the decision to this client, but only once per kind of call —
-        a previously-approved signature auto-allows."""
+        """The daemon's ApproveFn: round-trip the decision to this client, once per kind."""
         sig = approval_signature(tool_name, tool_input)
         if sig in approved_sigs:
             return True
@@ -536,8 +532,8 @@ async def ws_agent(ws: WebSocket) -> None:
                     approve=turn_approve,
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # default; stated because chat is where a silent skill tempts
-                    # The ONE surface with a turn after this one: a person can read a subagent's
-                    # late result. Every kernel-fired run is a single turn and defaults to False.
+                    # The one surface with a turn after this one: a person can read a subagent's
+                    # late result.
                     has_later_turn=True,
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
                     preamble=session_append,       # Focus (work-item) / Guard (general) block

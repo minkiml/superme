@@ -39,12 +39,9 @@ from .vocab.sandbox import sandbox_options
 
 log = logging.getLogger("superme-agent")
 
-# The two channels a turn's authored text can ride in. The system one is the CACHED prefix, so
-# anything phase-varying placed there re-writes the whole cache at every phase boundary; the turn
-# one is the user message, which is appended to a thread rather than rewritten in it.
+# The two channels a turn's authored text can ride in. The system one is the cached prefix.
 SYSTEM_CHANNEL, TURN_CHANNEL = "system", "turn"
-# The same boundary the birth block uses, so ONE rule peels every kernel-injected prefix back off
-# a message before a person is shown what they typed (`sessions._strip_kernel_prefix`).
+# The same boundary the birth block uses, so one rule peels every injected prefix back off.
 TURN_SEP = "\n\n---\n\n"
 
 # The CLI's last stderr lines: ProcessError says to check a stderr the SDK never piped.
@@ -105,9 +102,9 @@ def _window_from_model_usage(model_usage: dict | None, model: str | None) -> int
 
 def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None,
                    window_hint: int | None = None):
-    """Approximate context-window fill, or None. `usage` MUST be a single call's.
+    """Approximate context-window fill, or None.
 
-    No fallback window: a percentage against the wrong one is worse than none."""
+    `usage` must be a single call's."""
     if not usage:
         return None
     used = (
@@ -170,9 +167,7 @@ class AgentService:
 
     async def measure_context_floor(self, ctx: Context, model: str | None = None
                                     ) -> tuple[int, int] | None:
-        """The session's incompressible FLOOR: what every turn re-sends and no summary can shed.
-
-        System prompt, tools, skills and agent defs. Cached per (context, model)."""
+        """The session's incompressible floor: what every turn re-sends and no summary can shrink."""
         key = f"{ctx.id or '-'}::{ctx.mode}::{model or '-'}"
         if key in self._floor_by_key:
             return self._floor_by_key[key]
@@ -196,18 +191,13 @@ class AgentService:
         return self._floor_by_key[key]
 
     def _context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str:
-        """Where this turn is operating: host, cwd, knowledge roots, and the orientation digest.
-
-        A lookup table, not prose: every line rides every turn and the reader needs a path."""
+        """Where this turn is operating: host, cwd, knowledge roots, orientation."""
         where = ("the **SuperMe hub** — the owner's home host: their cross-domain self, and "
                  "SuperMe's own codebase" if ctx.layer == "global" else f"project host `{ctx.id}`")
-        # One labelled line per fact. Run together with `·` these read as prose and are scanned as
-        # prose, and the one the reader came for is a path in the middle of a sentence.
+        # One labelled line per fact. Run together they read as prose and are scanned as prose.
         rows = [("host", where), ("context", f"`{ctx.label}`"), ("cwd", f"`{ctx.cwd}`")]
-        # A skill cites its own package files relative to ITSELF (`templates/x.md`,
-        # `references/y.md`, `../../references/z.md`) — and nothing else here says what that is
-        # relative TO, so a run confirms the path with a search before it reads. Naming the root
-        # costs one line; the search cost a round trip in every phase measured.
+        # A skill cites its own package files relative to itself, so the harness must name its
+        # base directory.
         if (skills_root := _skills_root(ctx.mode)) is not None:
             rows.append(("skill packages", f"`{skills_root}/<skill>/` — what a skill's own "
                                            "`templates/…` and `references/…` are relative to"))
@@ -225,8 +215,8 @@ class AgentService:
                 ]
             else:
                 rows.append(("core knowledge", f"`{core_root}` — NOT under the cwd"))
-        # A rule rather than a location, and the only one here: a skill names a tool bare, looking
-        # it up under that name misses, and the fallback keyword search costs several round-trips.
+        # A rule rather than a location: a skill names a tool bare and the mount decides where it
+        # comes from.
         rows.append(("tool names", "SuperMe's own tools are `mcp__<server>__<tool>`; prompts and "
                      "skills name them bare, so add the namespace instead of searching the bare "
                      "name"))
@@ -262,7 +252,7 @@ class AgentService:
         ),
     }
     # A category block means something different to each frame, and one message cannot be true of
-    # both. Keyed (frame, category); `_CATEGORY_DENY` answers for every frame without an entry.
+    # both.
     _CATEGORY_DENY_BY_FRAME = {
         ("deputy", "workspace"): (
             "You judge this gate; you do not work the item. The phase skills belong to the run "
@@ -285,10 +275,9 @@ class AgentService:
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
                         activated_assets, preamble: str | None = None,
                         item_bound: bool = False, charter_key: str | None = None) -> list[dict]:
-        """Everything the turn is given, as ORDERED fragments.
+        """Everything the turn is given, as ordered fragments.
 
-        The single source of truth. Each carries `channel` — the cached system prefix, or the user
-        message — and `sep`, so joining a channel reproduces it byte-for-byte."""
+        The single source of truth."""
         frags: list[dict] = []
 
         def add(name: str, location: str, text: str, *, sep: str,
@@ -324,8 +313,7 @@ class AgentService:
         if ctx.persona_append:
             add("Project persona append", "Context.persona_append (per-project)",
                 ctx.persona_append, sep="\n\n")
-        # The one fragment that varies by PHASE, so it rides the turn: in the append it would
-        # re-write the whole cached prefix at every phase boundary. `compose_prompt` places it.
+        # The one fragment that varies by phase, so it rides the turn rather than the prefix.
         if preamble:
             add("Session-kind block — focus/guard/phase",
                 "core/kernel_speech.py · work_item_preamble (Current focus/Guard/phase)", preamble,
@@ -334,8 +322,7 @@ class AgentService:
 
     @staticmethod
     def _join_fragments(frags: list[dict]) -> str:
-        """Reconstruct the system append — the byte-for-byte inverse of the split. Turn-channel
-        fragments are not part of it; `compose_prompt` places those."""
+        """Reconstruct the system append, the byte-for-byte inverse of the split."""
         return "".join(f["sep"] + f["text"] for f in frags
                        if f.get("channel", SYSTEM_CHANNEL) == SYSTEM_CHANNEL)
 
@@ -343,11 +330,7 @@ class AgentService:
     def compose_prompt(preamble: str | None, prompt: str) -> str:
         """The message a turn actually sends.
 
-        The session-kind block rides HERE rather than in the system append, because it is the only
-        part that varies by phase and the append is the CACHED prefix: ~650 tokens of pointer
-        sitting there invalidated ~74,000 tokens of it, measured. Placed after the messages it
-        costs 1,433. Every turn restates it, which is also what carries it through a compaction —
-        a summary can drop a message, but it cannot drop the one being sent."""
+        The session-kind block rides here."""
         return f"{preamble}{TURN_SEP}{prompt}" if preamble else prompt
 
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
@@ -361,10 +344,9 @@ class AgentService:
 
     def assemble_system_append(self, ctx: Context, *, item_bound: bool = False,
                                charter_key: str | None = None) -> str:
-        """Public seam for the prompt inspector: the exact append this ctx would send. It takes no
-        preamble because it no longer carries one — that block rides the turn (`compose_prompt`),
-        which is what keeps this string identical across a work item's phases. `item_bound` must
-        match the real turn."""
+        """The exact append this ctx would send.
+
+        A public seam for the prompt inspector."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
@@ -373,9 +355,7 @@ class AgentService:
     def assemble_system_fragments(self, ctx: Context, *, preamble: str | None = None,
                                   item_bound: bool = False,
                                   charter_key: str | None = None) -> list[dict]:
-        """Everything the turn is given, as ordered fragments
-        [{name, location, text, channel}]. Same builder as the append and the composed prompt, so
-        all three always agree."""
+        """Everything the turn is given, as ordered fragments."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
@@ -487,9 +467,9 @@ class AgentService:
         item_bound: bool = False,
         charter_key: str | None = None,
     ) -> AsyncIterator[TurnEvent]:
-        """Run one turn against `ctx`, yielding TurnEvents. Raises on a hard SDK failure.
+        """Run one turn against `ctx`, yielding TurnEvents.
 
-        ClaudeSDKClient rather than query(), because `can_use_tool` needs the control channel held open."""
+        Raises on a hard SDK failure."""
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,

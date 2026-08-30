@@ -16,8 +16,9 @@ from .ledger import (LENSES, diagnoses, evidence_entries, evidence_status, lens_
                      missing_lenses, proof_rows, undiagnosed_failures, validation_discrepancies)
 
 def _how_checked(c: dict) -> str:
-    """One check → how the owner will know it held, in their words. Derived from the plan,
-    so the owner sees which rows are machine-decided."""
+    """One check, as how the owner will know it held.
+
+    Derived from the plan."""
     mode = str(c.get("mode") or "")
     how = {"command": "run for real",
            "interaction": "driven for real and judged",
@@ -30,8 +31,9 @@ def _how_checked(c: dict) -> str:
 
 
 def _slot(text: str | None, heading: str) -> str:
-    """A prose slot's body, with the section heading stripped when the author repeated it.
-    Structure is code's to own, so code drops the echo."""
+    """A prose slot's body, with the heading stripped when the author repeated it.
+
+    Structure is code's to own."""
     body = (text or "").strip()
     first, _, rest = body.partition("\n")
     if first.startswith("#") and first.lstrip("#").strip().lower() == heading.strip().lower():
@@ -43,9 +45,9 @@ _LENS_LINE = re.compile(r"(?mi)^(\s*[-*]\s+)(" + "|".join(LENSES) + r")(\s*:)")
 
 
 def _bold_lenses(text: str) -> str:
-    """Bold the lens name that OPENS a `## What else was looked at` bullet, and capitalize it.
-    Here rather than in CSS, so ONE rule says what a label looks like — casing included, or the
-    label reads as whatever the author happened to type."""
+    """Bold and capitalize the lens name opening a lens bullet.
+
+    One rule owns the label."""
     return _LENS_LINE.sub(
         lambda m: f"{m.group(1)}**{m.group(2).capitalize()}{m.group(3).strip()}**", text)
 
@@ -58,10 +60,9 @@ _LENS_OPENER = re.compile(r"(?mi)^\s*[-*]\s+(?:[*_]{1,2})?(" + "|".join(LENSES)
 
 
 def lens_slot_issues(text: str) -> list[str]:
-    """Why `What else was looked at` is not one bullet per lens.
+    """Why the lens slot is not one bullet per lens.
 
-    `_bold_lenses` only fires on a bullet opener, so lenses run together as a paragraph render as
-    prose and NOTHING says so — the slot looks filled and reads as a wall."""
+    Lenses run together render as prose and nothing says so."""
     body = (text or "").strip()
     if not body:
         return []
@@ -80,10 +81,9 @@ def lens_slot_issues(text: str) -> list[str]:
 def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
                            confirm: str = "", decisions: str = "", assumptions: str = "",
                            item_kind: str | None = None) -> dict:
-    """Write the owner's answer to what is being built, and what will prove it.
+    """The owner's answer to what is being built.
 
-    Everything factual is DERIVED from plan.md, because a hand-copied claim is a claim ABOUT the
-    plan."""
+    Facts are derived from plan.md."""
     # An OMITTED optional slot arrives as None, not "". Normalize once, here, where the type is
     # declared.
     approach, confirm = approach or "", confirm or ""
@@ -140,7 +140,7 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
 
 def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str = "",
                           confirms: str = "", looked_at: str = "", unknown: str = "") -> dict:
-    """Vet writes the narrative, code writes `## What didn't hold`.
+    """Vet writes the narrative, code writes `What didn't hold`.
 
     One writer each, so vet cannot write around a red check."""
     if bad := lens_slot_issues(_slot(looked_at, "What else was looked at")):
@@ -206,10 +206,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     # item back.
     for g in lens_gaps(item_dir):
         lines.append(f"- **{g['text']}** — raised by the {g['lens']} reading ({g['severity']}).")
-    # A build validation claim the kernel could not reproduce — the one record that must not
-    # depend on being mentioned.
-    # The COUNT is the owner's finding; the command and its output are a wall of code they never
-    # typed, and the cycle report already holds both.
+    # A build claim the kernel could not reproduce. The count is the finding.
     if (disagreed := validation_discrepancies(
             item_dir, cycle=(cycle_reports(item_dir) or [{}])[-1].get("cycle"))):
         n = len(disagreed)

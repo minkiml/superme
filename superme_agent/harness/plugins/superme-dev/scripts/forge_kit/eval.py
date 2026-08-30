@@ -105,8 +105,7 @@ def _build_prompt(form, artifact, intent, existing):
 
 
 def _purge_native_transcript(cwd_path):
-    """`claude -p` records a native transcript under the user's projects dir. Our cwd is a throwaway
-    tempdir, so that transcript is orphaned cruft — delete it."""
+    """`claude -p` records a native transcript under the user's projects dir. Remove it."""
     base = Path(cwd_path).name
     projroot = Path.home() / ".claude" / "projects"
     if base:
@@ -124,9 +123,7 @@ def _strip_frontmatter(text):
 
 
 def _run_footprint(env_obj):
-    """Reduce the envelope to the honest resource figures, not the cumulative one.
-
-    A naive total re-counts the same growing context every turn."""
+    """Reduce the envelope to the honest resource figures."""
     turns = max(int(env_obj.get("num_turns") or 1), 1)
     mu = env_obj.get("modelUsage")
     if isinstance(mu, dict) and mu:
@@ -154,9 +151,7 @@ def _console_argv(tool: str, *args: str) -> list[str] | None:
 
 
 def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
-    """One hermetic `claude -p` call, JSON output, so real run metrics come back with the reply.
-
-    A throwaway cwd, so the operated repo cannot leak into the judgment."""
+    """One hermetic `claude -p` call with JSON output, so real run metrics come back."""
     cmd = _console_argv("claude", "-p", "--strict-mcp-config", "--output-format", "json")
     if cmd is None:
         raise RuntimeError("the Claude CLI is not on PATH")
@@ -195,9 +190,7 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
 
 
 def _trial_run(form, artifact, *, task, model):
-    """Ballpark the ARTIFACT's own run cost on one synthetic task.
-
-    A constitution never runs, so its overhead is estimated from its description's length."""
+    """Ballpark the artifact's own run cost on one synthetic task."""
     if form == "constitution":
         m = re.search(r"^description:\s*(.+)$", artifact, re.MULTILINE)
         resident = m.group(1).strip() if m else artifact.strip()

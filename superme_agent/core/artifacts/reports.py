@@ -174,10 +174,9 @@ _PLACEHOLDER = re.compile(r"\{[a-z][a-z_]{1,}\}")
 
 
 def report_body_issues(body: str) -> list[str]:
-    """What is wrong with a report body, before it is anyone's file. Empty means it may be filed.
+    """What is wrong with a report body, before it is anyone's file.
 
-    Every report template opens with its `# ` title. Measured across 652 filed reports: 21 began
-    with something else and 3 carried junk on the heading line — the owner reads both verbatim."""
+    Empty means it may be written."""
     first = next((ln for ln in (body or "").splitlines() if ln.strip()), "")
     out: list[str] = []
     if not _HEADING.match(first):
@@ -225,8 +224,7 @@ def owner_decision(item_dir: Path) -> str:
 
 
 def proposed_work(item_dir: Path) -> str:
-    """A research review record's `## Proposed work` body — the work its findings imply.
-    Empty when missing, unfilled, or saying nothing."""
+    """A research review record's proposed-work body."""
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""

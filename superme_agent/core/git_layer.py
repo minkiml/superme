@@ -51,10 +51,9 @@ def diff_numstat(worktree: Path, base: str) -> dict:
 
 def item_diff(worktree: Path, base: str, *, path: str | None = None,
               char_cap: int = 24000) -> dict:
-    """One item branch's own diff, read INSIDE its worktree.
+    """One item branch's own diff, read inside its worktree.
 
-    `base...HEAD` names the item's branch only where HEAD is the item's branch — true in the
-    worktree, and never in the repo root, which cannot have that branch checked out."""
+    `base...HEAD` names the item's branch only where HEAD is that branch."""
     state = check_git_state(worktree)
     scope = ["--", path] if path else []
     proc = _git(worktree, "diff", f"{base}...HEAD", *scope, check=False)
@@ -417,10 +416,7 @@ def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "",
 
 def create_scratch_worktree(repo_dir: Path, repo_id: str, item_id: str, *,
                             base: str | None = None) -> dict:
-    """A DETACHED throwaway checkout for a read-only phase — the second wall
-    behind the permission classifier.
-
-    Detached on purpose: research merges nothing. The record carries `branch: None`."""
+    """A detached throwaway checkout for a read-only phase."""
     repo_dir = Path(repo_dir)
     if not is_git_repo(repo_dir):
         raise GitError(f"not a git repository: {repo_dir}")
@@ -448,9 +444,7 @@ VET_LOG = ".vet-env.log"
 
 
 def pid_alive(pid: int) -> bool:
-    """Is `pid` a process we could signal?
-
-    `os.kill(pid, 0)` is the POSIX idiom and a trap on Windows, where it terminates."""
+    """Is `pid` a process we could signal?"""
     if pid <= 0:
         return False
     if os.name == "nt":
@@ -472,9 +466,7 @@ def pid_alive(pid: int) -> bool:
 
 
 def _cwd_scan(wt: Path, match: str) -> list[int]:
-    """Every LISTENING process whose cwd is `wt`. `match` also requires it in the command line.
-
-    Needs `lsof`, so empty is not the same as nothing running."""
+    """Every listening process whose cwd is `wt`."""
     try:
         out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
                              capture_output=True, text=True, timeout=15, encoding="utf-8")
@@ -502,9 +494,7 @@ def _cwd_scan(wt: Path, match: str) -> list[int]:
 
 
 def servers_in(wt: Path, match: str = "") -> list[int]:
-    """Every live vet-env process belonging to `wt`, by cwd and by the state file.
-
-    Windows has no `lsof`, so there the state file is the whole answer."""
+    """Every live vet-env process belonging to `wt`, by cwd and by the state file."""
     found = list(_cwd_scan(wt, match))
     try:
         recorded = int(json.loads((Path(wt) / VET_STATE).read_text(encoding="utf-8")).get("pid") or 0)
@@ -518,8 +508,7 @@ def servers_in(wt: Path, match: str = "") -> list[int]:
 def terminate(pid: int) -> bool:
     """Stop a vet-env server and whatever it spawned.
 
-    The group where the OS has groups. Windows has no `killpg`, and an AttributeError is not an
-    OSError."""
+    The group, where the OS has groups."""
     killpg = getattr(os, "killpg", None)
     if killpg is not None:
         try:
@@ -700,10 +689,9 @@ _STASH_PREFIX = "superme-automerge"
 
 
 def compose_commit(subject: str, body: str = "", trailers: dict | None = None) -> str:
-    """The ONE commit-message shape SuperMe writes.
+    """The one commit-message shape SuperMe writes.
 
-    The main message is for the PROJECT, the trailer block for SuperMe. The project's history has
-    never heard of this workspace."""
+    The main message is for the project."""
     import textwrap
     blocks = [subject.strip()]
     body = (body or "").strip()
@@ -795,8 +783,7 @@ def commit_trailers(body: str) -> dict:
 
 
 def commit_patches(repo_dir: Path, shas: list[str], path: str, *, cap: int = 200_000) -> list[dict]:
-    """The patches `shas` applied to ONE file, in order. Per-commit, not a range —
-    a task's commits need not be contiguous."""
+    """The patches `shas` applied to one file, in order."""
     out: list[dict] = []
     used = 0
     for sha in shas:
@@ -820,9 +807,7 @@ def _backup_ref(item_id: str) -> str:
 
 
 def recut_branch(repo_dir: Path, item_id: str, branch: str, base: str) -> dict:
-    """Reset an item's branch back onto its BASE, the re-run's start-clean.
-
-    Nothing is lost: the old tip goes to a backup ref and the branch is moved, not deleted."""
+    """Reset an item's branch back onto its base, the re-run's start-clean."""
     repo_dir = Path(repo_dir)
     if not branch:
         return {"recut": False, "reason": "this item has no branch"}
@@ -855,10 +840,7 @@ def overlap(repo_dir: Path, branch: str, target: str) -> list[str]:
 
 def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
                     target: str | None = None) -> dict:
-    """The merge act owns freshness, not review: one comparison at the instant that matters.
-
-    Anchor unmoved merges, a sync conflict parks, overlapping paths re-vet. Conflicts are never
-    auto-resolved."""
+    """The merge act owns freshness, one comparison at the instant that matters."""
     repo_dir, worktree = Path(repo_dir), Path(worktree)
     target = resolve_anchor(repo_dir, target)
     if not worktree.is_dir():
@@ -882,9 +864,9 @@ def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
 def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
                   target: str | None = None, merged_commit: str | None = None,
                   message: str | None = None) -> dict:
-    """The ONE heavy merge: item branch to the anchor, under the op lock.
+    """The one heavy merge: item branch to the anchor, under the op lock.
 
-    SQUASH, keeping the branch so task granularity survives. A conflict unwinds to the backup ref."""
+    Squashed."""
     repo_dir = Path(repo_dir)
     with repo_lock(repo_dir):
         target = resolve_anchor(repo_dir, target)

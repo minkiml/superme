@@ -108,9 +108,7 @@ class SetTriageClassificationArgs(TypedDict, total=False):
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def set_triage_classification(args: dict) -> dict:
-        """Triage's RECORDING surface: name, proposed kind and deliverable, written onto the item.
-
-        The exit gate confirms durable fields rather than chat prose."""
+        """Triage's recording surface: name, proposed kind and deliverable."""
         from pathlib import Path
         from ....core.dev_knowledge import DevKnowledgeService, parse_deliverables
         item_id = _s(args, "item_id")

@@ -61,11 +61,8 @@ def _is_noise(record: dict, text: str) -> bool:
     return text.lstrip().startswith(_NOISE_PREFIXES)
 
 
-# Prepended to a session's FIRST user prompt. Dropping the whole record would hide what the owner
+# Prepended to a session's first user prompt. Dropping the whole record would hide what the owner
 # typed.
-# Every block SuperMe injects ahead of a person's own words, by the header it opens with. The
-# first two are written once at session birth; the rest are the session block, which rides every
-# turn since it left the system append.
 _KERNEL_PREFIX_HEADERS = (
     "### Work-item orientation",
     "### Subject activity-run trace",
@@ -76,11 +73,7 @@ _KERNEL_PREFIX_HEADERS = (
 
 
 def _strip_kernel_prefix(text: str) -> str:
-    """Cut SuperMe's own injected blocks off a prompt, leaving the message a person actually sent.
-
-    A turn can carry more than one — the session block, then a birth orientation — so peel until
-    what is left opens with none of them. Text that is prefix all the way down was never a
-    message."""
+    """Cut SuperMe's own injected blocks off a prompt, leaving the message a person would recognise."""
     out = text
     while out.lstrip().startswith(_KERNEL_PREFIX_HEADERS):
         parts = out.split(TURN_SEP, 1)
@@ -151,8 +144,9 @@ class SessionStore:
                                    repo_id=ctx.id)
 
     def delete(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> bool:
-        """Deletes the spine row and transcript; runs and events are PRESERVED, stamped
-        `session_fate`. Located by the SESSION'S cwd, not the caller's."""
+        """Delete the spine row and transcript.
+
+        Runs and events are preserved, stamped with the fate."""
         if not session_id:
             return False
         rec = self._spine.get_session(session_id)
@@ -161,8 +155,7 @@ class SessionStore:
         return self.discard_transcript(ctx, session_id, cwd=cwd)
 
     def delete_channel(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> int:
-        """Delete a whole CHANNEL — every thread the picker showed as one row; leaving
-        one behind reads as a failed delete."""
+        """Delete a whole channel, every thread the picker showed as one row."""
         rec = self._spine.get_session(session_id) or {}
         item_id = rec.get("item_id") or None
         targets = [session_id]

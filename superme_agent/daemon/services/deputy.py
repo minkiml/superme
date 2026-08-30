@@ -35,9 +35,7 @@ def deputy_gate_for(item: dict) -> str | None:
 
 
 def _success_signal(dev_root: Path, item: dict) -> str | None:
-    """The item's deliverable success signal from the PRD, verbatim — the review acceptance test.
-
-    None when it cannot be resolved; the brief then tells the deputy to escalate."""
+    """The item's deliverable success signal from the PRD, verbatim."""
     deliverable = item.get("deliverable")
     if not deliverable:
         return None
@@ -48,9 +46,7 @@ def _success_signal(dev_root: Path, item: dict) -> str | None:
 
 
 def _build_delta(item_dir: Path, gate: str, numbers: dict) -> str | None:
-    """The "since your last call at this gate" delta, assembled only on a loop re-entry.
-
-    A POINTER, not the source: what the deputy asked, the latest checkpoint, and movement counts."""
+    """The since-your-last-call delta, assembled only on a loop re-entry."""
     prior = [r for r in deputy_core.gate_decisions(item_dir, gate) if r.get("decision") == "send_back"]
     if not prior:
         return None
@@ -82,16 +78,12 @@ def _build_delta(item_dir: Path, gate: str, numbers: dict) -> str | None:
 
 
 def _in_review_loop(item_dir: Path) -> bool:
-    """True once the review deputy has sent this item back at least once.
-
-    That send-back is the only route back to the plan gate."""
+    """True once the review deputy has sent this item back at least once."""
     return deputy_core.count_send_backs(item_dir, "review") > 0
 
 
 async def run_deputy_gate(context_id: str, item_id: str) -> None:
-    """Dispatch the deputy at the item's current gate, then execute its verdict.
-
-    Best-effort: any failure rests the item at `awaiting_human`, never a silent auto-advance."""
+    """Dispatch the deputy at the item's current gate, then execute its verdict."""
     from ..app_state import get_spine
     from ...gateway import contexts
     try:
@@ -144,18 +136,16 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
 
 
 def _resolve_deputy_params(context_id: str, item: dict) -> tuple[str, str]:
-    """The deputy's own tier: this item's deputy pick → the system deputy setting → the floor.
-
-    Configured at system scope, so the judge is not a function of the judged."""
+    """The deputy's own tier: this item's pick, then the system setting."""
     return _spine.deputy_params(item_model=item.get("deputy_model"),
                                 item_effort=item.get("deputy_effort"))
 
 
 async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_root: Path,
                  model: str, effort: str) -> tuple[dict | None, int | None, dict | None]:
-    """Run one background deputy turn and return (verdict|None, tokens, usage).
+    """Run one background deputy turn.
 
-    None when the run made no valid `submit_gate_verdict` call, which the caller reads as could-not-judge."""
+    None when the run produced no verdict."""
     item_dir = dev_root / "work-items" / item_id
     strictness = _spine.get_deputy_strictness(gate)
     # The context the deputy judges from — assembled from durable state, nothing inherited.
@@ -237,8 +227,9 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
 # --------------------------------------------------------------------------- verdict → action
 
 def _headline(text: str, cap: int = 240) -> str:
-    """First paragraph of `text`, capped — the one line a decision bubble carries. The full rationale
-    stays in the event meta."""
+    """First paragraph of `text`, capped.
+
+    The one line a decision bubble carries."""
     head = (text or "").strip().split("\n\n")[0].replace("\n", " ").strip()
     return head if len(head) <= cap else head[:cap].rstrip() + "…"
 
@@ -248,15 +239,12 @@ _MD_MARK = re.compile(r"[*`_]")
 
 
 def _plain(text: str, cap: int = 200) -> str:
-    """The escalation's first line as plain prose, for the event log.
-
-    Surfaces render an event summary as text, so markdown emphasis would show through as asterisks."""
+    """The escalation's first line as plain prose, for the event log."""
     return _headline(_MD_MARK.sub("", _MD_LABEL.sub("", (text or "").strip())), cap)
 
 
 def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict | None) -> None:
-    """Carry out the deputy's decision using the SAME levers the owner's gate buttons pull. A missing or
-    invalid verdict falls to the owner, never a silent advance."""
+    """Carry out the deputy's decision using the same levers the owner's gate buttons pull."""
     dev_root = ctx.internal_root / "dev"
     if not verdict:
         _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
@@ -301,9 +289,7 @@ def _do_approve(ctx, context_id: str, item_id: str, gate: str, verdict: dict) ->
 
 
 def _do_send_back(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:
-    """Negotiate the deputy's change by firing a real turn at the work-item agent.
-
-    The phase that owns the fix re-runs and the deputy re-judges. Past the cap it escalates."""
+    """Negotiate the deputy's change by firing a real turn at the work-item agent."""
     dev_root = ctx.internal_root / "dev"
     change = verdict.get("change") or verdict.get("because") or ""
     # The cap is per-gate: a review loop gets its own tries, uncapped by earlier plan send-backs.
@@ -329,10 +315,9 @@ def _do_send_back(ctx, context_id: str, item_id: str, gate: str, verdict: dict) 
 
 
 def _clip_card(text: str, cap: int) -> str:
-    """Bound the page card WITHOUT cutting a word in half.
+    """Bound the page card without cutting a word in half.
 
-    A byte slice lands mid-bullet, so cut on a line boundary, keep whole bullets, and say when
-    anything was dropped."""
+    A byte slice lands mid-bullet."""
     text = (text or "").strip()
     if len(text) <= cap:
         return text
@@ -348,8 +333,9 @@ def _clip_card(text: str, cap: int) -> str:
 
 def _do_escalate(ctx, context_id: str, item_id: str, gate: str, verdict: dict, *,
                  reason: str, override: str | None = None) -> None:
-    """Page the owner with the deputy's instructions. The escalation text is the card the deputy owed —
-    summary, concerns, what to do — never a bare "please review"."""
+    """Page the owner with the deputy's instructions.
+
+    The text is the card the deputy wrote."""
     dev_root = ctx.internal_root / "dev"
     escalation = override or verdict.get("escalation") or verdict.get("because") or "(no detail)"
     _dev.set_work_item_status(dev_root, item_id, "awaiting_human")

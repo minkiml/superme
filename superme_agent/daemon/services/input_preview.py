@@ -1,7 +1,4 @@
-"""Read back the ACTUAL input a past run sent and render it as a self-contained HTML page.
-
-Every fragment is captured through the same builder a live turn used, and rendered under the
-channel it actually rode in — the cached system prefix, or the message. Pure read.
+"""Read back the actual input a past run sent and render it as a self-contained HTML page.
 """
 
 from __future__ import annotations
@@ -18,8 +15,7 @@ log = logging.getLogger("superme-agent")
 
 
 def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | None:
-    """The ACTUAL input a past run sent, read back from the capture into the dict `render_input_page`
-    takes. None when this run has no captured input."""
+    """The actual input a past run sent, read back from the capture."""
     from ...gateway import contexts
     from .. import app_state
     spine = app_state.spine
@@ -146,8 +142,7 @@ _ORIENT_HEADERS = ("### Work-item orientation", "### Subject activity-run trace"
 
 
 def _split_body(body: str) -> tuple[str | None, str]:
-    """Split a run's prompt body into (orient_block, trigger). Returns (None, body) for a resumed run,
-    whose orient lives earlier in the replayed transcript."""
+    """Split a run's prompt body into orient block and trigger."""
     b = body or ""
     if b.lstrip().startswith(_ORIENT_HEADERS):
         parts = b.split("\n\n---\n\n", 1)   # same boundary sessions._strip_birth_block uses
@@ -156,10 +151,7 @@ def _split_body(body: str) -> tuple[str | None, str]:
 
 
 def _peel_turn_block(body: str, turn_frags: list[dict]) -> tuple[list[dict], str]:
-    """Peel the turn-borne session block off the front of the recorded body.
-
-    Matched against the RECORDED fragment text, never re-derived — a block that does not actually
-    open the body is not reported as one, so a drifted capture reads as drifted."""
+    """Peel the turn-borne session block off the front of the recorded body."""
     b = body or ""
     for f in turn_frags:
         head = (f.get("text") or "") + TURN_SEP
@@ -169,8 +161,7 @@ def _peel_turn_block(body: str, turn_frags: list[dict]) -> tuple[list[dict], str
 
 
 def _frag_card(text: str, *, name: str, location: str, gate: bool = False) -> str:
-    """One fragment sub-card: the prompt-text box at full reading width, plus a right-side info gutter in
-    the page's added space, so the text is never narrowed."""
+    """One fragment sub-card: the prompt text at reading width, plus an info column."""
     body = (text or "").strip("\n")
     pre = ' class="gate"' if gate else ''
     meta = "" if gate else f'<div class="fmeta">{len(body):,} chars · ~{_approx_tokens(body):,} tok</div>'
@@ -216,10 +207,9 @@ def _fragment_orient(orient: str) -> list[dict]:
 
 
 def _render_surface(surface: dict | None) -> str:
-    """What the turn was ALLOWED to do.
+    """What the turn was allowed to do.
 
-    Two runs carrying identical words behave differently when one may run a shell. Omitted entirely
-    for rows captured before this existed."""
+    Two runs carrying identical words behave differently when one may run a shell."""
     if not surface:
         return ""
     def _paths(key: str) -> str:
@@ -248,14 +238,11 @@ def _render_surface(surface: dict | None) -> str:
 
 
 def render_input_page(data: dict) -> str:
-    """Render one input-inspector page — the ACTUAL bytes a run sent.
-
-    Each channel is broken into per-fragment sub-cards, labelled with its source name and location."""
+    """Render one input-inspector page, the actual bytes a run sent."""
     m = data["meta"]
     mode_chip = ("mode-captured", "ACTUAL · as sent to the model")
     banner = "This is the exact input that was sent to the model for this run."
-    # The system prompt is assembled per run and carries nothing phase-specific; the rest arrives
-    # as one message — the session block, then the birth orient block, then this run's trigger.
+    # The system prompt is assembled per run and carries nothing phase-specific.
     frags = data.get("system_fragments") or [
         {"name": "System append (whole)", "location": "agent_service.assemble_system_append()",
          "text": data.get("system_prompt", "")}]
@@ -296,9 +283,8 @@ def render_input_page(data: dict) -> str:
         trig_html = _render_section(trig_title, [{
             "name": f"{m.get('phase', '?')} trigger message",
             "location": "core/kernel_speech.py · phase speech", "text": trig}])
-    # The authored channels that never arrive as a message. The skill enters the transcript; the
-    # tools do NOT — only their names ride in the prefix, and Claude Code holds the schemas until
-    # an agent fetches one with `ToolSearch`. Reported apart so the per-request total stays true.
+    # The authored channels that never arrive as a message. The skill enters the transcript, the
+    # tools do not.
     skills, tools = data.get("skills") or [], data.get("tools") or []
     deferred = data.get("deferred_tools") or []
     skill_html = _render_section(
@@ -317,9 +303,7 @@ def render_input_page(data: dict) -> str:
              "overstated the per-request total roughly sixteenfold.")
     body_html = (f"{block_html}{orient_html}{trig_html}{skill_html}{tools_html}{deferred_html}"
                  f"{_render_surface(data.get('surface'))}")
-    # Summed from the very lists the cards render, so the total cannot disagree with them. Every
-    # one of these rides in EVERY request of the run, which is why the total is the number to read.
-    # ⑦ is deliberately absent: a schema costs nothing until an agent asks for it.
+    # Summed from the lists the cards render, so the total cannot disagree with them.
     counted = [*sys_frags, *block, *(_fragment_orient(orient) if orient is not None else []),
                *([] if m.get("is_gate") else [{"text": trig}]), *skills, *tools]
     total = sum(len((f.get("text") or "").strip("\n")) for f in counted)

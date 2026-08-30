@@ -24,9 +24,7 @@ from .background import (phase_exit_check, run_background_item_skill,
                          _run_background_triage)
 
 def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
-    """Fire the review-entry run for an item that just landed at review.
-
-    Flips the item `active` while it runs, because `active` with no run is an idle stall."""
+    """Fire the review-entry run for an item that just landed at review."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -57,9 +55,7 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
 
 
 def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
-    """Kick a button-launched sweep into its first investigate run.
-
-    An item created by pressing a button should not wait for a second click."""
+    """Kick a button-launched sweep into its first investigate run."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -84,9 +80,7 @@ def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
 
 
 def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
-    """Kick a freshly-active item into its first triage run.
-
-    Only for an item `active` at `triage` with no run in flight; a failure leaves it resting there."""
+    """Kick a freshly-active item into its first triage run."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -126,16 +120,13 @@ _SEND_BACK_TARGET = {"implementation": "plan", "research": "investigate"}
 
 
 def _send_back_phase(item: dict) -> str:
-    """Where a `revise` from review or build re-enters, for this item's kind. Unknown kinds route to
-    the implementation path rather than raise — losing recourse is the worse failure."""
+    """Where a revise from review or build re-enters, for this item's kind."""
     return _SEND_BACK_TARGET.get(str(item.get("kind") or ""), "plan")
 
 
 def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: str,
                         digest: str | None = None, by: str = "deputy") -> bool:
-    """Deliver gate feedback as a real turn on the item's own session, so the phase re-runs in-thread.
-
-    `by` sets attribution only. Routing is identical whoever gives it."""
+    """Deliver gate feedback as a real turn on the item's own session."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -217,10 +208,7 @@ def fire_deputy_feedback(context_id: str, item_id: str, *, phase: str, feedback:
 async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir: Path, *,
                                     session_id: str | None, phase: str, prompt: str,
                                     model: str | None, effort: str | None) -> None:
-    """Resume the item's session and let the agent re-run the phase against the feedback.
-
-    Ends at `awaiting_human`, which re-fires the gate so the deputy re-judges. That chaining IS the
-    loop."""
+    """Resume the item's session and let the agent re-run the phase against the feedback."""
     dev_root = ctx.internal_root / "dev"
     capture_prompt(context_id, prompt, item_id=item_id)
     # Re-read the item after any phase flip so the pointer names the phase this re-run actually

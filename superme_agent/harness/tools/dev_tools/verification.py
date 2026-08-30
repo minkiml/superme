@@ -11,11 +11,9 @@ class CheckPlanCommandsArgs(TypedDict, total=False):
 
 
 def _plan_coverage(item_dir, kind: str | None) -> str:
-    """Which of the plan's tasks nothing will prove — the same count `file_plan_report` reports.
+    """Which of the plan's tasks nothing will prove.
 
-    It lived only there, so planning learned of a gap by FILING the report, then went back through
-    authoring and dry-run and filed again: eight calls on one live run to add one check. Reading it
-    here costs nothing, because the dry-run is already the last step before the report."""
+    The same count `file_plan_report` reports, available before the report is filed."""
     from ....core.artifacts import proof_rows
     from ....core.vocab.kind_profiles import get_profile
     if get_profile(kind).kind == "research":
@@ -32,21 +30,16 @@ def _plan_coverage(item_dir, kind: str | None) -> str:
             "reports this same count to the owner.")
 
 
-# Writing to a pipe or a temp file is not "leaving the worktree" — only naming another CHECKOUT is.
-# A drive letter or a UNC share is absolute too. Matching only `/...` left the detector blind
-# to every native Windows path.
+# Naming another checkout is what counts. A pipe or a temp file is not leaving the worktree.
 _ABS_TOKEN = r"(?<![\w=])(?:[A-Za-z]:[\\/][^\s'\"|;&)]*|\\\\[^\s'\"|;&)]+|/[^\s'\"|;&)]+)"
 _SYSTEM_ROOTS = ("/dev/", "/tmp/", "/var/folders/", "/private/tmp/", "/usr/", "/etc/", "/bin/",
                  "/sbin/", "/opt/", "/proc/")
 
 
 def _stray_run_blocks(item_dir, repo_dir) -> str:
-    """`run:` blocks that leave this item's worktree — the one failure the dry run cannot see.
+    """`run:` blocks that leave this item's worktree.
 
-    A block that `cd`s to the primary checkout RUNS THERE happily: the tree exists, its files are
-    just older, so the dry run returns "no tests collected" — which 4d teaches the agent to expect.
-    It comes back green at plan and fails at build. One live item spent a whole revise cycle on it.
-    The plan skill states the rule ("never `cd`, never an absolute path"); nothing enforced it."""
+    One that `cd`s to the primary checkout comes back green."""
     import re
     from pathlib import Path as _P
     from ....core import artifacts as _arts
@@ -60,8 +53,8 @@ def _stray_run_blocks(item_dir, repo_dir) -> str:
     def norm(s) -> str:
         return str(s).replace("\\", "/").rstrip("/")
 
-    # Both forms. `resolve()` gives a drive and backslashes on Windows, so a plan written with
-    # POSIX paths could never prefix-match it.
+    # Both forms. On Windows `resolve()` gives a drive and backslashes, which no POSIX path
+    # matches.
     roots = {norm(repo_dir)}
     try:
         roots.add(norm(_P(repo_dir).resolve()))
@@ -136,8 +129,9 @@ class RecordValidationArgs(TypedDict, total=False):
 def _record_validation(*, store, context_id, dev_root=None, repo_dir=None,
                        bound_item_id=None, **_):
     async def record_validation(args: dict) -> dict:
-        """Build's own self-check, recorded as data instead of prose. Vet re-runs each command and
-        compares, so an unearned green returns as a finding rather than reaching the owner."""
+        """Build's own self-check, recorded as data instead of prose.
+
+        Vet re-runs each command, so a paraphrase cannot be checked."""
         from ....core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -321,9 +315,8 @@ def _read_verification_library(*, store, context_id, dev_root=None, bound_item_i
                 out.append("- (none)")
         item_id = _s(args, "item_id")
         d = _item_dir(dev_root, item_id) if item_id else None
-        # The LIBRARY needs no plan. Only this addendum does, and an item without one has no check
-        # to nominate — a research item never writes a plan at all, and close mounts this tool. It
-        # used to read the file unguarded and hand back a raw Errno 2.
+        # The library needs no plan. Only this addendum does, and an item without one has no check
+        # to nominate.
         plan_path = (d / "artifacts" / _arts.artifact_file("plan")) if d is not None else None
         if d is not None and plan_path.is_file() and not _bound_err(item_id, bound_item_id):
             noms = _arts.nominations(d)

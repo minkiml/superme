@@ -403,9 +403,7 @@ def rank_assets_by_relevance(
     spec_text: str, activated: set[str] | None = None, *, repo_dir: Path | None = None,
     asset_dir: Path | None = None, limit: int = 8,
 ) -> list[dict]:
-    """Deterministically rank the asset pool by keyword overlap with `spec_text`.
-
-    A slug or description hit counts double. Read-only, adopting is the owner's gate."""
+    """Rank the asset pool by keyword overlap with `spec_text`, deterministically."""
     want = _terms(spec_text)
     if not want:
         return []
@@ -497,9 +495,7 @@ def ensure_plugin_manifest(root: Path, name: str) -> None:
 def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *,
                      slug: str, content: str, source: str = "agent",
                      created: str = "") -> str:
-    """Write an approved artifact to its live home and return the path.
-
-    Server-side fields are stamped as defaults, never clobbering the agent's."""
+    """Write an approved artifact to its live home and return the path."""
     slug = slugify(slug)
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)

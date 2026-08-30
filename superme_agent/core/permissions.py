@@ -541,10 +541,7 @@ def _path_tokens(command: str) -> list[str]:
     return out
 
 
-# Only a plain literal absolute path. Anything richer is a value this cannot know without running
-# the shell.
-# Absolute under either convention, like `_is_absolute_token`. Matching only `/...` left every
-# native Windows path unexpanded, so the shortcut stayed refused there.
+# Only a plain literal absolute path. Anything richer is a value this cannot know.
 _ASSIGN_VALUE = r"""(?:[A-Za-z]:[\\/]|\\\\|/)[^\s;&|'"`$]*"""
 _LITERAL_ASSIGN = re.compile(r"""(?m)(?:^|(?<=[;&|\n]))\s*([A-Za-z_][A-Za-z0-9_]*)=(['"]?)("""
                              + _ASSIGN_VALUE + r""")\2\s*(?=$|[;&|\n])""")

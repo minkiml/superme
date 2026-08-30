@@ -25,8 +25,8 @@ _TEMPLATE_HOMES = {
     "report-plan":          ("plan", "report-plan-template.md"),
     "report-plan-research": ("plan", "report-plan-research-template.md"),
     "report-vet":           ("vet", "report-vet-template.md"),
-    # Only the reports a PEN derives are registered. A report the agent writes whole is named by
-    # its own skill and read from there — the template is the skill's, not the loader's.
+    # Only the reports a pen derives are registered. One the agent writes whole is named by its
+    # own skill.
 }
 _template_cache: dict[str, str] = {}
 
@@ -43,8 +43,9 @@ def skill_template(name: str) -> str:
 
 
 def template_section_spec(name: str) -> list[tuple[str, bool]]:
-    """[(heading, must_be_filled)] per `## ` heading — the template IS the
-    required-sections list. Fill detection reads each whole body, since a slot can wrap."""
+    """Heading and must-be-filled per `## ` heading.
+
+    The template is the required-shape spec."""
     spec: list[tuple[str, bool]] = []
     cur: str | None = None
     body: list[str] = []

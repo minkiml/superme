@@ -21,9 +21,7 @@ from .checkpoints import bank_auto_checkpoint, compacted_checkpoint
 from .completion import ensure_completion
 
 def fire_close_run(context_id: str, item_id: str, spine) -> bool:
-    """Fire the ONE closing run of the CLOSE phase, the workflow's only knowledge write.
-
-    When none can start, the item clears anyway with the gap on record."""
+    """Fire the one closing run, the workflow's only knowledge write."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     ctx = None
     try:
@@ -66,16 +64,14 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
                                 model: str | None = None, effort: str | None = None) -> None:
-    """Drive the item's ONE closing turn: reflect the locked changes into the anchor docs.
-
-    The kernel clears the item from there, so the run never completes it."""
+    """The item's one closing turn: reflect the locked changes into the anchor docs."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
-    # `read_work_item` computes this as the CURRENT phase's slot, so it is close's own thread on a
-    # retry and None on the first entry, like every other phase.
+    # `read_work_item` computes this as the current phase's slot, so it is close's own thread on a
+    # retry.
     session_id = item.get("session_id") or None
     title = item.get("title") or item_id
-    # Both are already on record here; close used to spend a turn each rediscovering them.
+    # Both are already on record here, so close reads them rather than rediscovering them.
     from ....core import artifacts as _arts
     try:
         nominated = len(_arts.nominations(item_dir))
@@ -84,8 +80,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     prompt = kernel_speech.close_trigger(
         item_id, title, merge_commit=item.get("git_merge_commit"), nominated=nominated)
     capture_prompt(context_id, prompt, item_id=item_id)
-    # The standing phase/role pointer every runner sends. A first close has no thread behind it,
-    # so the trigger and the item folder are all it starts from.
+    # The standing phase pointer every runner sends. A first close has no thread behind it.
     focus = kernel_speech.work_item_preamble(
         item_id, item, str(item_dir), interactive=False, shell_cwd=ctx.cwd,
         anchor_dir=str(ctx.internal_root / "dev" / "general"),
@@ -153,9 +148,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
 
 
 def _clear_or_retry(context_id: str, item_id: str, outcome: str) -> None:
-    """The post-CLOSE hook: reported clears the item, otherwise re-fire.
-
-    Clearance always completes: a closing run that cannot finish is a SuperMe fault."""
+    """The post-close hook: reported clears the item, otherwise re-fire."""
     from .. import clearance
     try:
         if outcome:

@@ -70,9 +70,9 @@ _WHOLE_BODY_PHASES = ("triage", "build", "review", "close", "investigate")
 
 
 def _file_phase_report(*, store, context_id, dev_root=None, bound_item_id=None, scope=None, **_):
-    """The pen for whichever phase's report this session is entitled to write.
+    """The pen for whichever phase's report this session may write.
 
-    The phase comes from the mounted scope, never the agent, which could name another's."""
+    The mounted scope picks the phase."""
     async def file_phase_report(args: dict) -> dict:
         from ....core import artifacts as _arts
         phase = str(scope or "")
@@ -87,11 +87,10 @@ def _file_phase_report(*, store, context_id, dev_root=None, bound_item_id=None, 
         body = _s(args, "body") or ""
         if not body.strip():
             return _err("body is empty — the report is the deliverable, not a formality.")
-        # A body copied out of a fenced template can arrive with an escape before its heading, and
-        # the owner reads this file. Only blank and lone-backslash lines are dropped.
+        # A body copied out of a fenced template can arrive with an escape before its heading.
         body = re.sub(r"\A(?:[ \t]*\\?[ \t]*\r?\n)+(?=#)", "", body)
-        # REFUSED, not repaired: a silent fix teaches the agent nothing and the next report
-        # arrives the same way. Checked before the write, so a bad body never becomes a file.
+        # Refused, not repaired. A silent fix teaches the agent nothing and the next report
+        # arrives the same way.
         if bad := _arts.report_body_issues(body):
             return _err("Not filed — " + "; ".join(bad)
                         + ". Fix the body and call again; nothing was written.")
@@ -125,10 +124,9 @@ class FileVetReportArgs(TypedDict, total=False):
 
 def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
     async def file_vet_report(args: dict) -> dict:
-        """The vet cycle's user report. Hybrid: you write the narrative.
+        """The vet cycle's user report. You write the narrative.
 
-        Code writes `## What didn't hold` off the recorded entries, so a failure reaches the owner
-        regardless."""
+        Code writes the failures, so one reaches the owner regardless."""
         from ....core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):

@@ -93,9 +93,7 @@ class ReportCompletionArgs(TypedDict, total=False):
 
 
 def _open_questions(raw) -> tuple[list[dict], str]:
-    """Normalize `user.questions` to the four-field shape, or return the retry complaint.
-
-    A bare string is refused: prose is a question the agent has not separated from its reasoning."""
+    """Normalize `user.questions` to the four-field shape, or return the retry complaint."""
     out: list[dict] = []
     for i, q in enumerate(raw or [], 1):
         if not isinstance(q, dict):
@@ -118,8 +116,7 @@ SUBJECT_MAX = 50
 def _commit_spec(raw) -> tuple[dict | None, str]:
     """Normalize `machine.commit`, or return the retry complaint.
 
-    The mechanical rules are checked rather than asked for, because a too-long subject is wrong
-    forever. Imperative mood is left to the agent."""
+    The rules are checked here."""
     if raw in (None, {}):
         return None, ""
     if not isinstance(raw, dict):
@@ -147,10 +144,7 @@ def _commit_spec(raw) -> tuple[dict | None, str]:
 
 
 def _exit_blockers(exit_check) -> str | None:
-    """What this phase owes before it may declare an ending, or None.
-
-    A phase that finishes in a state its own gate rejects sends the item round a send-back, a
-    re-run and a second gate — to fix what it was already holding when it stopped."""
+    """What this phase owes before it may declare an ending, or None."""
     if exit_check is None:
         return None
     try:
@@ -161,9 +155,7 @@ def _exit_blockers(exit_check) -> str | None:
 
 
 def _report_completion(*, completion_sink: dict | None = None, exit_check=None, **_):
-    """Validate and deliver one run's completion payload into the runner's per-run sink.
-
-    The stored shape keeps top-level outcome, summary and next beside the full payload."""
+    """Validate and deliver one run's completion payload into the runner's sink."""
     async def report_completion(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}
@@ -197,8 +189,7 @@ def _report_completion(*, completion_sink: dict | None = None, exit_check=None, 
                      **({"questions": questions} if questions else {})},
         }
         
-        # `needs_user` and `blocked` are endings that REPORT a wall; they are not claims the
-        # phase's own work is complete, so they are never held here.
+        # `needs_user` and `blocked` report a wall. They are not claims the phase's work is done.
         if outcome not in ("needs_user", "blocked") and (owed := _exit_blockers(exit_check)):
             return _err(
                 f"Not yet — this phase's own artifact does not pass its gate: {owed}. "
@@ -223,7 +214,7 @@ class VerdictMachine(TypedDict, total=False):
 def _lines(raw) -> list[str]:
     """A list field to its non-empty lines, one point each.
 
-    A single string is read as one point: one line instead of a one-item list has still said it."""
+    A single string reads as one point."""
     if isinstance(raw, str):
         return [raw.strip()] if raw.strip() else []
     if not isinstance(raw, (list, tuple)):
@@ -232,9 +223,7 @@ def _lines(raw) -> list[str]:
 
 
 def _escalation_md(esc: dict) -> str:
-    """The page card, assembled HERE so every escalation reads the same.
-
-    The deputy supplies the parts and the kernel the shape."""
+    """The page card, assembled here so every escalation reads the same."""
     out = [f"**Issue summary:** {' '.join(str(esc.get('summary') or '').split())}"]
     for label, key in (("Concern", "concerns"), ("What to do", "what_to_do")):
         if (points := _lines(esc.get(key))):
@@ -243,9 +232,7 @@ def _escalation_md(esc: dict) -> str:
 
 
 class VerdictEscalation(TypedDict, total=False):
-    """The owner's page card. Three parts, the middle two LISTS, one point per entry.
-
-    A paged owner reads this cold, and the kernel renders it so the shape cannot drift."""
+    """The owner's page card. Three parts, the middle two lists."""
     summary: Required[Annotated[str, ((((("one line, plain and concrete: what is going on. No "
                                           "preamble, no restating the item title")))))]]
     concerns: Required[Annotated[list[str], ((((("why this genuinely needs the owner: one short "
@@ -273,9 +260,7 @@ class SubmitGateVerdictArgs(TypedDict, total=False):
 
 
 def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):
-    """Validate and deliver the deputy's verdict, flattened to what the executor acts on.
-
-    Cross-field floor: `change` iff send_back, `escalation` iff escalate."""
+    """Validate and deliver the deputy's verdict, flattened to what the executor acts on."""
     async def submit_gate_verdict(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}
@@ -347,10 +332,7 @@ SUBMIT_GATE_VERDICT_TOOL = ToolSpec(
 
 
 def make_run_report_server(sink: dict, *, exit_check=None):
-    """The `run` MCP server (report_completion only), bound to one run's sink — mounted by every
-    kernel-fired work-item runner, read by it after the turn ends.
-
-    `exit_check` is a zero-arg callable returning this phase's unmet gate conditions."""
+    """The `run` MCP server, bound to one run's sink."""
     return build_mcp_server("run", [REPORT_COMPLETION_TOOL], completion_sink=sink,
                             exit_check=exit_check)
 

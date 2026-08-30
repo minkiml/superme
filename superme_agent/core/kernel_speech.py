@@ -13,14 +13,13 @@ from .vocab import kind_profiles, sandbox
 
 # triggers (durable user-messages — each opens one background run's transcript)
 
-# Phases whose report is one whole body the agent fills. Every measured run of one of these spent a
-# round trip fetching the template, so the trigger carries it. The FILE stays the single source.
+# Phases whose report is one whole body the agent fills. Each spent a round trip fetching its own
+# template.
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
-    """The background intake run's message, durable. The delta is WHICH skill for WHICH item.
+    """The background intake run's message.
 
-    `changed` names records rewritten since this phase's last run, which a resumed agent cannot
-    recall."""
+    The delta is which skill for which item."""
     base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
     if not changed:
         return base
@@ -38,9 +37,7 @@ def intake_trigger(skill: str, item_id: str, title: str,
 
 
 def completion_nudge(skill: str) -> str:
-    """The completion BACKSTOP, fired only when a run ended without calling
-    `report_completion`. It asks about THIS RUN, because for triage and review the phase ends when
-    someone approves."""
+    """The completion backstop, fired when a run ended without reporting."""
     return (
         f"Your {skill} run is over, but it never called `report_completion`, so the kernel has no "
         f"outcome for it. Call it now and nothing else.\n"
@@ -65,8 +62,9 @@ def checkpoint_trigger(item_id: str) -> str:
 
 
 def session_checkpoint_trigger(memory_path: str) -> str:
-    """The same for a session with NO work-item. The path is named so the
-    write lands inside the turn's permission scope."""
+    """The same for a session with no work-item.
+
+    The path is named so the write needs no search."""
     return (_COMPACTION_IMMINENT
             + f"This session is not tied to a work-item, so run superme-dev:checkpoint and WRITE "
               f"the result to `{memory_path}` (create or overwrite it), so what only this "
@@ -74,9 +72,9 @@ def session_checkpoint_trigger(memory_path: str) -> str:
 
 
 def vet_env_script() -> str:
-    """Absolute path to the plugin's `vet_env.sh`, or "". It serves BOTH build and vet, so it is
-    the plugin's script rather than either skill's; and it lives in the install, so nothing
-    relative resolves."""
+    """Absolute path to the plugin's `vet_env.sh`, or empty.
+
+    It serves both build and vet."""
     from ..paths import DEV_PLUGIN_DIR
     p = DEV_PLUGIN_DIR / "scripts" / "vet_env.sh"
     return str(p) if p.is_file() else ""
@@ -102,8 +100,7 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 vet_env: bool = False, kernel: bool = True) -> str:
     """The background vet run, durable since vet forgets each cycle.
 
-    `kernel` false means no sandbox here, or an empty `machine` list reads as a plan with no
-    checks."""
+    `kernel` false means no sandbox here."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
     if not kernel:
         base += ("\n\nThis host has no sandbox the kernel can run a check in, so NOTHING was run "
@@ -163,11 +160,9 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
 def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
                        *, reload_skill: bool = False, vet_env: bool = False,
                        diagnoses: dict[str, dict] | None = None) -> str:
-    """The loop's failure-hop build run. The failed cycle's report IS the payload, injected once.
+    """The loop's failure-hop build run.
 
-    `diagnoses` are vet's located causes, lifted above the report. Vet never names the fix.
-    `vet_env` re-states the server note, which rode the ENTRY trigger only: the caller sets it when
-    this thread may no longer hold that turn."""
+    The failed cycle's report is the payload, injected rather than fetched."""
     head = (
         "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
         "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
@@ -182,8 +177,7 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
             for c, d in diagnoses.items())
         found = ("\n\nWhat vet found, per failing check — the cause, not the remedy; the change "
                  "is yours to reason out within the current plan:\n" + lines)
-    # Ahead of the report body, not after it: an instruction behind a wall of report text is read
-    # as part of the report.
+    # Ahead of the report body. An instruction behind a wall of report text reads as part of it.
     env = vet_env_note(script) if vet_env and (script := vet_env_script()) else ""
     return (
         f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). {head} "
@@ -194,8 +188,7 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
 
 def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, feedback: str,
                            digest: str | None = None) -> str:
-    """The deputy's send-back re-run · durable. Worded exactly as the owner's
-    would be — the agent must NOT branch on who sent it."""
+    """The deputy's send-back re-run, worded as the owner's would be."""
     digest_block = f"\n\nWhat happened downstream since the last plan (context for your re-plan):\n{digest}\n" if digest else ""
     # There is one sanctioned way to change plan.md. The whole-file rewrite discards the progress
     # build earned.
@@ -217,11 +210,9 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
 
 def close_trigger(item_id: str, title: str, *, merge_commit: str | None = None,
                   nominated: int = 0) -> str:
-    """The auto-fired close run · durable. Review's exit locked code and git, so close's
-    whole job is knowledge.
+    """The auto-fired close run.
 
-    `merge_commit` and `nominated` are facts the kernel already holds; stating them saves close
-    the round trips it spent rediscovering them."""
+    Review's exit locked code and git, so close writes knowledge only."""
     # Close spent turns on `git log --grep` hunting for a sha the item record carries.
     landed = (f" It merged as `{merge_commit}` — `git show --stat {merge_commit}` is the change "
               f"inventory, so no searching for it." if merge_commit else "")
@@ -357,9 +348,7 @@ def phase_contract(kind: str | None, phase: str) -> dict:
 
 
 def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True) -> str:
-    """The post-compaction continuity notice, owed until a real turn runs. A pointer, never contents.
-
-    A compacted agent does not know it lost its memory."""
+    """The post-compaction continuity notice, owed until a real turn runs."""
     if not checkpoint_path:
         return ""
     # A general session has no item folder, so "trust the item's artifacts" would point at
@@ -389,10 +378,7 @@ def _shell_is_in(shell_cwd, worktree) -> bool:
 def _materials_on_disk(item_dir) -> str:
     """The item's readable files, as the paths they actually have.
 
-    Measured: agents compose `work-items/<id>/plan.md` and miss, because the real path carries an
-    `artifacts/` segment — 23 times since 2026-08-01, twice in one run that had just listed the
-    folder. Naming them removes the composing. Every distinct name is kept: a truncated list
-    would hide the one file that was wanted."""
+    Agents compose the path and miss the `artifacts/` segment."""
     try:
         names = {sub: sorted(f.name for f in (Path(item_dir) / sub).glob("*.md") if f.is_file())
                  for sub in ("artifacts", "reports")}
@@ -639,8 +625,7 @@ def general_preamble() -> str:
 
 
 def onboarding_preamble(mode: str | None = None) -> str:
-    """Interactive dev turns while the project has no established memory · per-turn.
-    This IS the kickoff — it carries the skill directive."""
+    """Interactive dev turns while the project has no established memory."""
     if mode == "project-init":
         skill = ("Run **project-init** — this was connected as a NEW/greenfield project.")
     elif mode == "retrofit":
@@ -714,10 +699,7 @@ DEPUTY_STRICTNESS_DEFAULT = "medium"
 
 
 def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
-    """Every deputy dispatch · one-shot. The FRAME and the floor only.
-
-    The procedure is the `superme-dev:deputy` skill, named in the dispatch. Written in the plain
-    style the verdict owes, because the reader copies the text before it parses the rule."""
+    """Every deputy dispatch. The frame and the floor only."""
     if strictness not in _DEPUTY_STRICTNESS:   # defence in depth, the setting is validated too
         strictness = DEPUTY_STRICTNESS_DEFAULT
     band = _DEPUTY_STRICTNESS[strictness]
@@ -838,10 +820,9 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
                        delta: str | None = None, success_signal: str | None = None,
                        verdicts: list[dict] | None = None,
                        authorizations: str | None = None) -> str:
-    """A deputy dispatch's BIRTH prompt · one-shot.
+    """A deputy dispatch's birth prompt.
 
-    THE DEPUTY READS WHAT THE OWNER READS, AND NEVER THE OWNER'S DECISION — a judge handed a verdict
-    judges the verdict."""
+    The deputy reads what the owner reads."""
     parts = [f"Run superme-dev:deputy to judge the **{gate}** gate of work-item `{item_id}` "
              f"(\"{title}\").", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
@@ -901,8 +882,7 @@ def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
 
 
 def render_handoff_block(item: dict, item_dir: Path) -> tuple[str | None, int]:
-    """The item's intake thread, first turn after new loop activity · promoted
-    once. Intake did not do this work and narrates from the record."""
+    """The item's intake thread, first turn after new loop activity."""
     item_dir = Path(item_dir)
     try:
         mark = int(str(item.get("handoffs_promoted") or 0).strip() or 0)

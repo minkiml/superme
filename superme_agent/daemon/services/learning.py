@@ -30,9 +30,7 @@ FORGE_KIT = DEV_PLUGIN_DIR / "scripts" / "forge_kit"   # the forge agent's lint 
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------
 
 async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
-    """Drive one background distill pass over the un-processed candidate pool.
-
-    Disposable and sessionless, so it cannot pollute the resumable picker. Nothing is applied."""
+    """One background distill pass over the un-processed candidate pool."""
     # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent;
     prompt = kernel_speech.distill_trigger()
     # These transcripts are disposed, so the trail's first entry is the only record of the ask.
@@ -106,8 +104,7 @@ def has_answer(answers, question) -> bool:
 
 
 def _intended_path(prop: dict, repo_id: str | None) -> str | None:
-    """Where this proposal WILL publish to, computed up front so it can be staged and shown at the gate.
-    None when the home cannot be resolved."""
+    """Where this proposal will publish to, computed up front so it can be staged."""
     from ...core import operational as ops
     slug = _proposal_slug(prop)
     try:
@@ -122,8 +119,7 @@ def _intended_path(prop: dict, repo_id: str | None) -> str | None:
 
 
 def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> str | None:
-    """For a constitution proposal, write the scope's in-force rules into the workspace so the eval can
-    run a real conflict check. None when there is nothing to compare against."""
+    """For a constitution proposal, write the scope's in-force rules into the workspace."""
     if prop["output_form"] != "constitution":
         return None
     from ...core import operational as ops
@@ -143,9 +139,7 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
 
 
 async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
-    """Drive one background WRITE pass for a single approved proposal, so no context mixes.
-
-    A clean finish leaves it `drafted`; if the agent never staged, it reverts to `proposed`."""
+    """One background write pass for a single approved proposal."""
     prop = _dev_store.get_memory_proposal(proposal_id)
     repo_id = context_id if prop["target_scope"] == "repo_dev" else None
     staged_path = _intended_path(prop, repo_id)
@@ -230,9 +224,9 @@ def _render_slice(messages: list[dict]) -> str:
 
 
 async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
-    """Run ONE capture sweep over a session's un-swept conversation tail.
+    """One capture sweep over a session's un-swept tail.
 
-    The watermark advances only on a clean pass, so an abort leaves the slice to be re-swept."""
+    The watermark advances only on success."""
     context_id = ctx.id
     if session_id in _sweeping:
         return {"status": "already_running", "session_id": session_id}
@@ -327,9 +321,7 @@ SWEEP_POLL_SECONDS = 5 * 60      # how often the idle loop scans (the watermark 
 
 def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
                    then_delete: str | None = None) -> None:
-    """Fire-and-forget a sweep so the triggering request returns immediately.
-
-    `then_delete` chains a session delete after it, when a transcript must be read before it goes."""
+    """Fire-and-forget a sweep so the triggering request returns immediately."""
     if not session_id:
         return
 
@@ -346,10 +338,7 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
 
 
 async def sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict:
-    """One idle-scan pass: sweep every dev session quiet for `idle_seconds` with enough un-swept content.
-    Eligible sessions sweep concurrently.
-
-    VISIBLE-ONLY, for token safety: the scan walks only recorded, dashboard-visible sessions."""
+    """One idle-scan pass over every dev session quiet for `idle_seconds`."""
     cfg = _spine.get_sweep_config()
     if idle_seconds is None:
         idle_seconds = cfg["idle_seconds"]
@@ -403,10 +392,7 @@ async def sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: in
 
 
 async def idle_sweep_loop() -> None:
-    """The daemon's idle-sweep heartbeat: every `poll_seconds`, if auto-learning is on, scan and sweep
-    quiet dev sessions.
-
-    Reading the cadence each iteration lets a config change take effect without a restart."""
+    """The daemon's idle-sweep heartbeat."""
     while True:
         try:
             poll = max(30, _spine.get_sweep_config()["poll_seconds"])

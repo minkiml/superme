@@ -394,16 +394,15 @@ for _scope, _names in TOOL_SCOPES.items():
 
 
 def make_dev_mcp_server(store, context_id: str, *, scope: str, **deps):
-    """Build the `dev` MCP server for one context, carrying only the tools `scope` may see.
-
-    Unknown scopes raise. Optional deps thread per-turn state to specific tools."""
+    """The `dev` MCP server for one context, carrying only the tools `scope` may call."""
     return build_mcp_server("dev", dev_tool_specs(scope),
                             store=store, context_id=context_id, scope=scope, **deps)
 
 
 def dev_tool_specs(scope: str) -> list[ToolSpec]:
-    """The EXACT spec list `make_dev_mcp_server` mounts for a scope. One source, so the prompt
-    inspector cannot claim a turn carried tools it didn't."""
+    """The exact spec list `make_dev_mcp_server` mounts for a scope.
+
+    One source, so nothing drifts."""
     try:
         names = TOOL_SCOPES[scope]
     except KeyError:
