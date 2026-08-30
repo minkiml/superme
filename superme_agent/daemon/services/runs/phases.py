@@ -167,13 +167,16 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
         session_id = (slots.get(kind_profiles.session_slot(run_phase))
                       or slots.get(kind_profiles.LEGACY_INTAKE_SLOT)
                       or item.get("session_id") or None)
-        # Claude Code stores sessions per project path, so a detached checkout's session cannot be
-        # resumed from the repo root.
-        from ..git_ops import ensure_scratch_worktree
+        # Claude Code stores sessions per project path, so a session only resumes in its own tree.
+        from ..git_ops import ensure_scratch_worktree, item_worktree_cwd
         repo_dir = ensure_scratch_worktree(ctx, context_id, item,
                                            dev=_dev, dev_store=_dev_store, spine=_spine)
         if repo_dir != ctx.cwd:
             ctx = replace(ctx, cwd=repo_dir)
+        # The phase being re-entered, not the one being left — the item has already been flipped.
+        stand_in = item_worktree_cwd(ctx, item, run_phase)
+        if stand_in != ctx.cwd:
+            ctx = replace(ctx, cwd=stand_in)
         model = _spine.effective_model(context_id, item_model=item.get("model"))
         effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
         if begin_run(ctx, context_id, item_id, skill, model, phase=run_phase) is None:

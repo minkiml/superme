@@ -102,12 +102,47 @@ def test_the_branch_dies_with_its_worktree() -> None:
     shutil.rmtree(git_layer.worktree_dir("probe", "item-a").parent, ignore_errors=True)
 
 
+def test_a_re_entry_stands_where_the_first_entry_stood() -> None:
+    print("\nthe send-back re-run")
+    ph = src("superme_agent/daemon/services/runs/phases.py")
+    body = ph.split("def fire_phase_feedback")[1].split("\ndef ")[0]
+    ok("the re-run swaps cwd the way a first entry does", "item_worktree_cwd" in body)
+    ok("...keyed on the phase being entered, not the one being left",
+       "item_worktree_cwd(ctx, item, run_phase)" in body)
+    # The item in hand still names the old phase, so the flip has to come first.
+    ok("...and the phase flip comes first",
+       body.index("set_work_item_phase") < body.index("item_worktree_cwd"))
+
+
+def test_the_seam_answers_for_a_re_entered_plan() -> None:
+    print("\nthe seam, asked about a plan that already has a tree")
+    import tempfile
+    from types import SimpleNamespace
+    from superme_agent.daemon.services.git_ops import item_worktree_cwd
+    with tempfile.TemporaryDirectory() as tmp:
+        root, tree = Path(tmp) / "repo", Path(tmp) / "tree"
+        root.mkdir()
+        tree.mkdir()
+        ctx = SimpleNamespace(cwd=root)
+        held = {"kind": "implementation", "git_worktree": str(tree)}
+        ok("a re-entered plan goes back to the same tree",
+           item_worktree_cwd(ctx, held, "plan") == tree)
+        ok("...and so does a re-entered build", item_worktree_cwd(ctx, held, "build") == tree)
+        gone = {"kind": "implementation", "git_worktree": str(Path(tmp) / "removed")}
+        ok("a tree that has been removed falls back to the repo root",
+           item_worktree_cwd(ctx, gone, "plan") == root)
+        ok("...and so does an item that never had one",
+           item_worktree_cwd(ctx, {"kind": "implementation"}, "plan") == root)
+
+
 def main() -> None:
     test_the_phases_that_touch_code_share_one_tree()
     test_the_tree_exists_before_the_first_phase_that_needs_it()
     test_a_phase_run_stands_where_its_phase_says()
     test_the_write_boundary_did_not_widen()
     test_the_branch_dies_with_its_worktree()
+    test_a_re_entry_stands_where_the_first_entry_stood()
+    test_the_seam_answers_for_a_re_entered_plan()
     print(f"\nALL GREEN — {PASS} checks passed.")
 
 

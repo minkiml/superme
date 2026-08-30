@@ -318,8 +318,7 @@ async def ws_agent(ws: WebSocket) -> None:
             # The live state, deliberately distinct from `session_kind`: a session born during
             # onboarding stops behaving as one.
             is_onboarding = bool(gate_general and session_kind != "diagnosis" and unestablished)
-            # Build and vet run at the worktree; intake stays at the repo, because the CLI stores
-            # transcripts per cwd.
+            # The phase decides which tree a turn stands in, and the CLI keys transcripts by cwd.
             write_boundary = None
             deny_write_tools = None  # vet turns set this: file-writes denied outright
             protected_paths = None    # review turns set this: plan.md is not review's to write
