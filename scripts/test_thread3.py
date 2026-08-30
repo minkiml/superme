@@ -616,6 +616,27 @@ depth: checks
     ok("a path INSIDE this worktree is clean", not fires(f"pytest {WT}/tests/test_ledger.py"))
     ok("a word merely containing 'cd' is clean", not fires("python -m mycd --check"))
 
+    # Windows shapes. The runner is the only thing that can answer whether this repo works there,
+    # and a guard that cannot see a native path is a guard that never fires.
+    WIN = r"C:\Users\me\.superme\worktrees\pg\aaaabbbbcccc"
+
+    def wfires(cmd: str) -> bool:
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "item"
+            (d / "artifacts").mkdir(parents=True)
+            (d / "artifacts" / "plan.md").write_text(PLAN.format(cmd=cmd), encoding="utf-8")
+            return bool(_stray_run_blocks(d, WIN))
+
+    ok("a drive-absolute path into another checkout fires",
+       wfires(r"pytest C:\Users\me\Developer\test-playground\tests\test_ledger.py"))
+    ok("a UNC path fires", wfires(r"pytest \\build\share\tests\test_ledger.py"))
+    ok("a drive-absolute path INSIDE this worktree is clean",
+       not wfires(r"pytest C:\Users\me\.superme\worktrees\pg\aaaabbbbcccc\tests\t.py"))
+    ok("…and the same path written with forward slashes is clean too",
+       not wfires("pytest C:/Users/me/.superme/worktrees/pg/aaaabbbbcccc/tests/t.py"))
+    ok("a relative command is still clean against a Windows worktree",
+       not wfires("pytest -k quiet_sum"))
+
     # A helper nobody calls is a detector that never fires — pin the wiring, not just the logic.
     src_txt = Path("superme_agent/harness/tools/dev_tools/verification.py").read_text(
         encoding="utf-8")

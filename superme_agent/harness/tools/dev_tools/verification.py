@@ -33,6 +33,9 @@ def _plan_coverage(item_dir, kind: str | None) -> str:
 
 
 # Writing to a pipe or a temp file is not "leaving the worktree" — only naming another CHECKOUT is.
+# A drive letter or a UNC share is absolute too. Matching only `/...` left the detector blind
+# to every native Windows path.
+_ABS_TOKEN = r"(?<![\w=])(?:[A-Za-z]:[\\/][^\s'\"|;&)]*|\\\\[^\s'\"|;&)]+|/[^\s'\"|;&)]+)"
 _SYSTEM_ROOTS = ("/dev/", "/tmp/", "/var/folders/", "/private/tmp/", "/usr/", "/etc/", "/bin/",
                  "/sbin/", "/opt/", "/proc/")
 
@@ -54,15 +57,24 @@ def _stray_run_blocks(item_dir, repo_dir) -> str:
         checks = _arts.parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])
     except (OSError, ValueError):
         return ""
-    root = str(_P(repo_dir).resolve())
+    def norm(s) -> str:
+        return str(s).replace("\\", "/").rstrip("/")
+
+    # Both forms. `resolve()` gives a drive and backslashes on Windows, so a plan written with
+    # POSIX paths could never prefix-match it.
+    roots = {norm(repo_dir)}
+    try:
+        roots.add(norm(_P(repo_dir).resolve()))
+    except (OSError, ValueError):
+        pass
     bad: list[str] = []
     for c in checks:
         for line in str(c.get("run") or "").splitlines():
             if re.search(r"(^|[;&|]\s*)cd\s", line):
                 bad.append(f"{c.get('id') or '?'}: `cd` — {line.strip()[:70]}")
                 continue
-            for tok in re.findall(r"(?<![\w=])/[^\s'\"|;&)]+", line):
-                if tok.startswith(_SYSTEM_ROOTS) or tok.startswith(root):
+            for tok in re.findall(_ABS_TOKEN, line):
+                if tok.startswith(_SYSTEM_ROOTS) or any(norm(tok).startswith(r) for r in roots):
                     continue
                 bad.append(f"{c.get('id') or '?'}: absolute path — {tok[:60]}")
                 break
